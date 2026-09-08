@@ -1,0 +1,6 @@
+{
+  "schema": "k4-resource/v2",
+  "resource_id": "resource-036",
+  "target_mode": "FAST",
+  "current_ref": "refs/heads/main"
+}
