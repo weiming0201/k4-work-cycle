@@ -1,140 +1,135 @@
-# Goal 与 Plan：从验收集合到可执行依赖序
+# Align, Goal, Plan, Run
 
-> 本文定义 `k4-goal` 与 `k4-plan` 的共同语义合同。其上位来源是
-> `resource-033@bb64afe05f1f7d447ff17ace70113a8671d82566` 的
-> `SYSTEM-THEORY.md`，尤其是 3.1、11.4、11.5 与 14.14。这里的两项
-> Skill 是从该理论当前版本抽取的 Goal/Plan 稳定合同，不是 Agent Frame 的内部组成。
-> 理论与具体消费者的适用性仍须分别取证；本文不声称跨领域或跨 Host 普遍成立。
+> This Resource is derived from the current work-contract responsibilities in
+> `resource-033@bb64afe05f1f7d447ff17ace70113a8671d82566`. It is an external
+> Ability Resource, not part of Agent Frame and not an authority projection of
+> any particular Provider.
 
-## 1. 对象与边界
+## 1. One cycle, four stable results
 
-一项工作先由 Goal 定义怎样才算合格，再由 Plan 定义怎样使这些合格条件取得执行资格。
+The cycle is `Align -> Goal -> Plan -> Run -> Align`.
 
-Goal 的唯一稳定结果是一组验收点。Baseline、权限、资源、停止等附属字段只限定该集合的身份和
-有效边界，不构成额外验收结果。验收点共同充分：只有全部验收点通过，本轮 Goal 才达成；
-任一点为 `Finding` 或 `unknown`，本轮 Goal 都不得标为达成。Goal 不排列执行顺序，不选择实现，
-也不因记录了授权引用而取得授权。
+- Align owns the evidenced description and routing of current differences.
+- Goal owns the result acceptance set, execution envelope, and control
+  contracts for one increment.
+- Plan owns one selected route and the operation dependency graph used to
+  attempt that Goal.
+- Run owns the actual operation records and the separate judgments against the
+  Goal's acceptance and control contracts.
 
-Plan 的唯一稳定结果是一张以 Goal 验收点为节点的有向无环依赖图。Plan 不新增、删除、改写或
-复制验收判据；它只引用精确的 Goal 版本和 `point_id`，并为每个节点声明达到该验收点所需的
-执行合同。Plan 通过只表示执行合同完整，在声明前提满足时可以交给执行系统；不表示当前权限、
-输入、资源或基线仍成立，也不表示动作已发生、结果已通过或内容已采用。
+These are four Skills, not four Agents, actor roles, mandatory project
+directories, or a Workflow that must always run. A consumer may compose them
+into a Workflow; this Resource does not create that runtime.
 
-具体 Agent、Workflow 或 Host 只有在另行建立兼容性后才能消费 Goal 与 Plan。调用、安装、注册或
-投射不转移二者的内容权威。Provider 与 Agent Frame 的字段只属于消费侧适配，不进入本合同。
-例如 `focus_id`、Provider、实际 actor 与 Activation time 是一次运行取得当前行动权时产生的事实，
-不属于 Goal 验收定义；消费侧可以引用 Goal 内容标识建立 Activation，但不能反向把运行事实写回 Goal。
+## 2. Binding direction
 
-## 2. Goal 是验收点集合
+Align may bind one Run when reconciling an attempt, or no Run for cold-start
+observation. Goal binds one Align and selects only its `goal-candidate` item
+IDs. Plan binds one frozen Goal. Run binds the same Goal and one executable
+Plan already bound to it.
 
-Goal 必须冻结同一目标对象、期望状态、Baseline、证据截止、权限边界、资源与预算边界、最大副作用、
-合法停止状态、未完成交付和一组稳定验收点。每个点具有唯一 `point_id`，且只属于 `prediction`
-或 `control` 一类；同时包含两类义务的点必须拆开。
+Each binding contains the predecessor's raw-file SHA-256 and semantic-content
+SHA-256. The immediate consumer verifies the supplied bytes. Binding preserves
+identity; it does not copy authority or predecessor content.
 
-验收点不是愿望、任务、检查清单或实现步骤。全部验收点的合取必须足以判定 Goal；相互矛盾、重复
-或对达成判定没有贡献的点构成质量 Finding。带来源但不承担验收责任的内容只能作为辅记录，不能
-稀释验收集合。
+## 3. Semantic input and mechanical generation
 
-Goal Candidate 可以使用明确列入 `evidence_cutoff` 的既有来源和 Baseline。禁止的是先观察本次目标
-运行的结果，再补写、收窄或放宽相应验收点。任何验收点或控制边界的语义变化都形成带新内容标识的
-Goal 版本；旧 Goal 和已经绑定它的 Plan、运行与结果不得被覆盖。
+The AI authors temporary semantic input: statements, classifications,
+references, acceptance and control contracts, operation descriptions, and
+actual result claims. That input is process material, not the stable result.
 
-## 3. 预测验收与控制验收
+Rust alone generates the stable envelope and closed structure, schema version,
+timestamp, IDs, predecessor bindings, coverage indexes, control timing,
+aggregate status, digest, canonical serialization, and absent-path output.
+Unknown or extra input fields are rejected. Stable JSON is never hand-patched.
 
-两类验收按被判断的对象分开，而不是按使用了哪个 Tool 分开。
+Every Skill exposes one type-specific Rust executable with two operations:
 
-### 3.1 预测验收
+| executable | Skill operation | external check |
+| --- | --- | --- |
+| `k4-align-result` | `generate` | `validate` |
+| `k4-goal-result` | `generate` | `validate` |
+| `k4-plan-result` | `generate` | `validate` |
+| `k4-run-result` | `generate` | `validate` |
 
-预测验收判断实际运行结果是否符合运行前冻结的结果合同。冻结内容至少包括观察变量、适用条件、
-观察窗口、预期结果或允许范围、反面、结果合同的来源与内容身份、比较规则，以及适用时的总体与采样规则。
+The Skill calls only its own `generate`. Tests, consumers, and auditors may
+call `validate`. Generation uses the same validator before and after exclusive
+creation of the output.
 
-预测验收只有在真实运行已经产生 `actual_result_ref` 后才能形成结果。判定把实际结果与冻结结果合同
-比较，返回 `pass`、`Finding` 或 `unknown`。预言本身被写下、格式正确或看起来合理都不是通过证据。
+## 4. Align boundary
 
-结果合同必须保存来源身份、内容标识、比较方法、独立性与结论上限。可执行程序可以取得或比较实际
-结果，但“使用了 executable”本身不改变这是一次结果验收，也不证明结果合同正确。
+Align freezes one observation subject, boundary, cutoff, declared source set,
+and sourced items classified as `aligned`, `gap`, `conflict`, or `unknown`.
+Each item routes to `none`, `goal-candidate`, `retain`, or an identified
+external destination.
 
-### 3.2 控制验收
+Align does not define a desired result, acceptance criterion, control method,
+or operation. Source coverage proves only that every declared source was used;
+it cannot prove that the declared source set exhausts reality.
 
-控制验收判断实际采用的控制方式及其轨迹是否偏离运行前冻结的控制合同。冻结内容至少包括要求的
-控制方法、允许变化、禁止漂移、必须产生的 trace、检查方法和不满足时的停止路线。
+## 5. Goal boundary
 
-控制验收只有在实际执行已经产生 `actual_method_ref` 与所需 trace 后才能形成结果。判定比较实际
-控制方式与冻结合同，返回 `pass`、`Finding` 或 `unknown`；它不因为控制未偏移而担保业务结果正确。
+Goal freezes three distinct things:
 
-能够确定性检查的控制必须交给 Tool；不能确定性检查的控制必须声明判断方法、独立性和结论上限，
-不能借用 Tool 名称冒充机械保证。具体证据和检查机制由验收合同声明，不形成第三类验收本体。
+1. acceptance points state which observable results must pass and how each is
+   falsified and judged;
+2. control contracts state which execution variable must remain within which
+   domain, what drift is forbidden, how it is traced and checked, and whether
+   the check is invariant or terminal;
+3. the execution envelope states authority, resources, budget, maximum side
+   effects, stop conditions, and the incomplete deliverable.
 
-### 3.3 两类结果不得互代
+Acceptance is about the result. Control is about keeping execution within its
+declared domain. Neither is an operation or a route, and neither substitutes
+for the other. A judge is `self`, `independent-agent`, `script`, or `human`
+with an explicit claim limit. Goal does not plan or execute work.
 
-预测通过不能证明控制方式未偏移；控制通过不能证明预期结果发生。一次 Goal 达成要求其全部预测点
-和控制点分别通过。实际结果记录是对冻结 Goal 的新事实，不得追加回或改写 Goal 本体。
+## 6. Plan boundary
 
-## 4. Goal 的合格合同
+Plan is one flat operation DAG. Each operation declares its dependencies,
+Action or Tool reference, responsible executor, inputs, outputs, permissions,
+resources, maximum effects, checks, retry ceiling, and recovery. It also names
+the Goal acceptance points it helps satisfy and the Goal controls it must obey.
 
-一个可冻结 Goal 至少回答：
+Rust derives the reverse coverage index. An executable Plan must cover every
+Goal acceptance point and control contract. Multiple operations may satisfy
+one acceptance point; one operation may support multiple points; enabling
+operations may satisfy none. This deliberately prevents a Goal point from
+being mistaken for a Plan node.
 
-1. 当前判断的是哪个目标对象、版本、范围和期望状态；
-2. 当前 Baseline、来源、证据截止和未知是什么；
-3. 允许谁在什么目的、范围、期限、资源和最大副作用内行动；
-4. 哪些验收点共同充分，为什么每一点都影响最终达成判断；
-5. 每个预测点的冻结结果合同是什么；
-6. 每个控制点的冻结控制合同是什么；
-7. 完成、暂停、失败和取消怎样区分，未完成时交付什么及从哪里恢复；
-8. 哪些内容只是偏好、推断或未知，不能作为事实或授权使用。
+Dependencies express necessary precedence. Missing dependency edges do not
+grant concurrency. Parallel execution is allowed only through an explicit
+group whose members have no dependency path and whose reason and guards are
+stated. Plan stores the selected route, not discarded exploration or actual
+execution.
 
-缺少承重对象、边界或验收合同的 Goal 返回 `not-frozen` 或 `unknown`，不得由 Plan 补写。
+## 7. Run boundary
 
-## 5. Plan 是带执行合同的验收依赖图
+Run attempts only the operations already named by the Plan. It records every
+Plan operation, every Goal acceptance point, and every Goal control contract
+exactly once. These records are separate because operation success, result
+acceptance, and control compliance are different claims.
 
-Plan 精确绑定一个不可变 Goal 版本。图中每个节点与 Goal 的一个 `point_id` 一一对应；图外不存在
-新增验收点，图内不重复验收判据。Plan 若发现 Goal 点缺失、含混或需要新增，必须停止并请求新的
-Goal 版本。
+An operation cannot run after a non-pass dependency. An acceptance result
+cannot pass until every mapped operation passes. An invariant control cannot
+remain `not-run` after any operation governed by it has run; a terminal control
+may remain pending until the terminal check. Rust copies the required control
+timing from Goal rather than accepting it from semantic input.
 
-每个节点除引用验收点外，还必须声明一份达到该点的执行合同。合同把内部操作展开为最小增量序列
-或子图；每项分别记录输入、动作、输出、责任、Ability 或 Tool 引用、内部依赖、顺序与幂等条件、
-逐步权限、资源与容量、最大副作用、前后检查、重试上限、恢复位置、下一入口、停止路线和实际结果
-去向。内部操作不能偷偷创造新的验收义务；一旦需要新的验收判据，必须返回新的 Goal 版本。
+Run does not replan, broaden authority, adopt output, or select the next Goal.
+Its result may become input to a new Align. Version 1 deliberately excludes
+automatic reuse of evidence from an older Run.
 
-每条依赖边必须说明：
+## 8. Mechanical and semantic limits
 
-- 为什么前点通过是后点取得执行资格的必要前提；
-- 跨边时哪些对象身份、Core、接口、权限、资源、History、外部关系或其他合同必须保持；
-- 前点为 `Finding`、`unknown` 或未运行时，后点停在哪里并交付什么。
+The kernel can prove exact fields, closed enums, nonempty requirements,
+generated IDs, declared-source coverage, exact predecessor bytes, Goal-to-Plan
+coverage, acyclic operation dependencies, guarded parallel structure, complete
+Run coverage, dependency eligibility, mapped-operation prerequisites,
+invariant-control timing, aggregate statuses, digests, and absent atomic output
+creation.
 
-只有全部前置节点为 `pass` 且边守卫当前成立，节点才能取得执行资格。没有依赖路径不自动产生并行
-权限；并行还必须显式证明写入、资源、证据、权限和副作用可以共存。稳定 Plan 是 DAG；重试作为
-引用同一 Plan 的新运行尝试保存，不用回边改写计划历史。
-
-## 6. Plan 的可执行性
-
-Plan 不担保成功，也不授予当前执行资格。Plan 的 `executable` 只表示执行合同完整，在其声明前提
-满足时可由执行系统消费；每个节点真正取得执行资格前，仍须重新检查当前权限、输入、资源、基线和
-边守卫。合同级 `executable` 至少要求：
-
-- Goal 身份、版本和内容标识可解析，全部验收点被且只被引用一次；
-- 图无环，每条边有必要性理由、守卫和非通过路线；
-- 每个节点的执行合同完整，所需 Ability、Tool、权限、资源和输入具有可检查引用；
-- 每项预测和控制结果都有既定写入位置与判定责任；
-- 已知失败、部分结果、不可逆效果、恢复与未决交付已被保留；
-- 没有由便利、文件顺序或事后结果制造的依赖。
-
-缺少已知必要条件返回 `not-executable`；现有证据不足以判断可执行性时返回 `unknown`。Plan 不以
-“执行时再想”修补承重空位，也不把预测耗时或结果成功冒充当前可执行性。
-
-## 7. 稳定定义、运行事实与采用
-
-Goal 和 Plan 都是版本化稳定定义。实际调用、节点状态、结果、失败、副作用和恢复事实进入引用相应
-内容标识的外部 State 与 append-only History，不追加到 Goal 或 Plan 文件中。后来成功不删除旧失败；
-新 Goal 或 Plan 不改变旧运行当时绑定的合同。
-
-形成 Goal、形成 Plan、取得执行权限、执行成功、验收通过和稳定采用是分立判断。任何一个通过都不能
-替代其他判断。高影响工作所需独立性由具体验收合同冻结，不由 Agent 数量、角色名称或平台机制推定。
-
-## 8. 符合性边界
-
-机械工具可以验证字段、唯一性、引用、内容标识、Goal 点覆盖、图无环和稳定文件未漂移；它不能证明
-验收点在语义上共同充分、结果合同正确、控制设计合理、外部授权有效、现实资源存在或执行一定成功。
-
-语义形成者必须判断验收集合和执行路线；独立检查者只在声明的对象、Baseline、证据与方法内形成
-`pass`、`Finding` 或 `unknown`。不能回源、不能执行或不能判断的内容保持真实未知。
+It cannot prove that Align observed everything relevant, Goal contracts are
+semantically sufficient, a Plan route is wise, external authority or evidence
+is genuine, or an action happened merely because a reference was supplied.
+Those remain bounded semantic judgments and external reality checks.

@@ -1,93 +1,83 @@
 # Goal result contract
 
-Author the `content` object below as the Candidate. Use `null` for the contract
-that does not match a point's `mode`. The freeze Tool adds the outer result
-wrapper, timestamp and digest.
+The AI authors only this temporary semantic input:
 
 ```json
 {
-  "goal_id": "ref-safe-id",
-  "version": "version-ref",
-  "supersedes": null,
-  "status": "frozen | not-frozen | unknown",
-  "target": {
-    "identity": "exact object identity",
-    "version_ref": "baseline version or content identity",
-    "boundary": "included and excluded boundary"
-  },
-  "desired_outcome": "observable desired state",
+  "align_item_ids": ["item ID from the bound Align"],
+  "objective": "observable desired state",
+  "target": "exact object identity, version, and boundary",
   "source_refs": ["stable source reference"],
   "evidence_cutoff": {
-    "at": "cutoff description or timestamp",
-    "included_refs": ["evidence admitted before the target attempt result"]
+    "at": "cutoff before observing this attempt's result",
+    "included_refs": ["evidence admitted before the cutoff"]
   },
   "baseline_refs": ["exact baseline reference"],
-  "evidence_claims": [
-    {
-      "kind": "fact | source-statement | inference | preference | unknown",
-      "statement": "claim",
-      "source_ref": null
-    }
-  ],
   "scope": ["authorized in-scope result"],
   "non_goals": ["explicit exclusion"],
-  "authorization": {
-    "ref": "authorization source",
-    "scope": "authorized action boundary",
-    "claim_limit": "what this reference does and does not prove"
-  },
-  "control_envelope": {
+  "execution_envelope": {
+    "authorization_ref": "authorization source",
+    "authorization_scope": "authorized purpose and action boundary",
+    "authorization_claim_limit": "what the source does and does not prove",
+    "resources": ["resource identity or explicit none"],
     "budget": "budget ceiling",
-    "resources": ["resource identity or declared none"],
-    "maximum_side_effects": ["maximum allowed effect"],
+    "maximum_side_effects": ["maximum permitted effect"],
     "stop_conditions": {
       "completed": "completion stop",
       "paused": "pause stop",
       "failed": "failure stop",
       "cancelled": "cancellation stop"
     },
-    "incomplete_deliverable": "stable result, evidence and resume entrance"
+    "incomplete_deliverable": "stable evidence and exact resume entrance"
   },
   "acceptance_points": [
     {
-      "point_id": "p1",
-      "mode": "prediction",
-      "statement": "result condition that affects the Goal verdict",
-      "required_evidence": ["actual-result evidence requirement"],
-      "independence": "who or what may judge, with conclusion limits",
-      "prediction": {
+      "statement": "result condition contributing to the Goal verdict",
+      "required_evidence": ["actual-result evidence"],
+      "judge": {
+        "kind": "self | independent-agent | script | human",
+        "claim_limit": "maximum conclusion supported by this judge"
+      },
+      "acceptance": {
         "observable": "variable to observe",
-        "conditions": ["applicable condition"],
+        "conditions": ["applicable condition, including explicit none"],
         "window": "observation window",
         "expected": "predicted value or range",
-        "falsifier": "observation that makes this point non-pass",
-        "result_contract_ref": "frozen source and content identity",
-        "comparison_method": "how actual result is compared",
-        "sampling_rule": "population and sampling rule, or explicit full census"
-      },
-      "control": null
-    },
-    {
-      "point_id": "c1",
-      "mode": "control",
-      "statement": "control condition that affects the Goal verdict",
-      "required_evidence": ["actual-method and trace requirement"],
-      "independence": "who or what may judge, with conclusion limits",
-      "prediction": null,
-      "control": {
-        "required_method": "frozen control method",
-        "allowed_variations": ["explicitly allowed change"],
-        "forbidden_drift": ["change that makes this point non-pass"],
-        "required_trace": ["trace that must exist"],
-        "check_method": "how actual method and trace are compared",
-        "on_non_pass": "stop and incomplete-delivery route"
+        "falsifier": "observation that makes the point non-pass",
+        "comparison_method": "how actual and expected are compared",
+        "sampling_rule": "population and sampling rule or full census"
       }
     }
   ],
+  "control_contracts": [
+    {
+      "statement": "execution condition contributing to the Goal verdict",
+      "required_evidence": ["actual-method and trace evidence"],
+      "judge": {
+        "kind": "self | independent-agent | script | human",
+        "claim_limit": "maximum conclusion supported by this judge"
+      },
+      "controlled_variable": "variable kept within bounds",
+      "allowed_domain": ["permitted value, range, or state"],
+      "forbidden_drift": ["change that makes the control non-pass"],
+      "required_trace": ["trace that must exist"],
+      "check_method": "how actual state and allowed domain are compared",
+      "check_timing": "invariant | terminal",
+      "on_non_pass": "stop and incomplete-delivery route"
+    }
+  ],
+  "blockers": [],
   "unknowns": []
 }
 ```
 
-For a frozen Goal, `source_refs`, `baseline_refs`, `scope`, resources, maximum
-side effects, and `acceptance_points` are nonempty. Point IDs are unique and
-ref-safe. A changed semantic field requires a new version and `supersedes`.
+`acceptance_points` must be nonempty when the Goal is frozen.
+`control_contracts` may be empty. An explicit sentence is required even when
+an acceptance point has no special condition. Rust adds each `point_id` and
+`control_id` and derives `status`:
+
+- nonempty `blockers` -> `not-frozen`;
+- otherwise nonempty `unknowns` -> `unknown`;
+- otherwise -> `frozen`.
+
+The stable envelope is `k4-goal-result/v2` and contains an exact Align binding.

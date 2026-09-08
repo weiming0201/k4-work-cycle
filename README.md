@@ -1,17 +1,42 @@
-# K4 Goal and Plan
+# K4 Work Cycle Skills
 
-This Resource provides two Agent Skills:
+This Resource provides four peer Agent Skills:
 
-- `k4-goal` freezes one bounded Goal as a complete set of acceptance points.
-- `k4-plan` turns that frozen set into an executable, guarded dependency graph.
+- `k4-align`: reconcile a bounded current situation and expose possible next
+  Goal inputs;
+- `k4-goal`: freeze selected Align items as result acceptance, execution, and
+  control contracts;
+- `k4-plan`: freeze one guarded operation DAG for one exact Goal;
+- `k4-run`: attempt one exact Plan and freeze operation, acceptance, and
+  control results.
 
-The normative design is in [`DESIGN.md`](./DESIGN.md). The Skills are derived
-from that design and from `resource-033@bb64afe05f1f7d447ff17ace70113a8671d82566`.
-They do not depend on Agent Frame. A compatible consumer may later register or
-project them as external Actions without acquiring their authority; compatibility
-must be established for that consumer rather than inferred from this Resource.
+Their dependency is intentionally asymmetric:
 
-Run `python3 tests/run.py` to exercise the canonical Goal and Plan validators,
-their exact binding, point coverage, graph contracts, and principal refusal
-paths. Passing the harness does not mechanically prove semantic sufficiency,
-authorization, executability in a particular Host, or portability.
+```text
+Align [optional exact Run binding]
+  -> Goal [exact Align binding]
+  -> Plan [exact Goal binding]
+  -> Run  [exact Goal and Plan bindings]
+  -> Align
+```
+
+[`DESIGN.md`](./DESIGN.md) defines the shared boundary. Each Skill contains its
+own Rust binary source under `scripts/`; [`kernel`](./kernel) provides only
+shared deterministic parsing, validation, hashing, binding, ID derivation, and
+atomic output code.
+
+Build without writing into the Resource tree:
+
+```text
+CARGO_TARGET_DIR=<external-target-dir> cargo build --offline --manifest-path kernel/Cargo.toml
+```
+
+Run the end-to-end contract harness with:
+
+```text
+CARGO_TARGET_DIR=<external-target-dir> cargo test --offline --manifest-path kernel/Cargo.toml
+```
+
+Mechanical
+success proves the declared schemas and bindings only. It does not prove
+semantic sufficiency, external authority, evidence truth, or wise action.
