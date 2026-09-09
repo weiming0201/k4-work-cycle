@@ -1,6 +1,6 @@
 {
   "bindings": {},
-  "content_sha256": "70cd010e111cef100217faf4c206de8d0cc11b141b250cb1d10a8cddf8731ed1",
+  "content_sha256": "bcad7041cbf51862b74f5e8f6001fef545bc9bdf58f5a9cd82e8249e7d362e61",
   "document": {
     "cue_version": "v0.17.1",
     "extension_id": "k4-work-cycle",
@@ -32,11 +32,11 @@
       },
       {
         "path": "skills/k4-align/SKILL.md",
-        "sha256": "5a14d798aae2eb174baf75d5a59b6a56552ef5c02ce4b61b7e0c71398c16e779"
+        "sha256": "a193afd66b2205c5845aa524aa45d3b62aac2c42b65197fb9724db063509f18c"
       },
       {
         "path": "skills/k4-align/assets/protocol.cue",
-        "sha256": "1894d10614a170a595362da262684c1eb4d40e19c1388fa3457d5711b19a0917"
+        "sha256": "13790052781eb487adb7ef426289c34a76c274d79369814c66925bfcafe8453b"
       },
       {
         "path": "skills/k4-align/references/protocol.md",
@@ -44,11 +44,11 @@
       },
       {
         "path": "skills/k4-align/scripts/materialize",
-        "sha256": "44b5a119c216ee3e9013e5860e0e6f58aab7b3248afa72d433f4c248e0022a53"
+        "sha256": "abc7e6e41125365bd663c11d4f26738125e6b186ffe1b2b8c78ae44d5e12c4ac"
       },
       {
         "path": "skills/k4-goal/SKILL.md",
-        "sha256": "d903f7ab06a4cb9ef18dc18d98f54df6adb63f75e03d72c4e0c269f039c0e359"
+        "sha256": "64e2490b6411c72914fa26013a42400493234e76c9d9290617b69031ba9afddf"
       },
       {
         "path": "skills/k4-goal/assets/protocol.cue",
@@ -60,11 +60,11 @@
       },
       {
         "path": "skills/k4-goal/scripts/materialize",
-        "sha256": "44b5a119c216ee3e9013e5860e0e6f58aab7b3248afa72d433f4c248e0022a53"
+        "sha256": "e33af9127dff470ed2ec6ca081caef755f8282cbb41cc3ea79b3c68b9bb6ba67"
       },
       {
         "path": "skills/k4-plan/SKILL.md",
-        "sha256": "41d9af23e0f269f627e4d953d8090a46f3646f7e9c08e1ced86a7082e9d13d8e"
+        "sha256": "1e539db91089fd7a622d2c8c63d07085b2e7692ee7da2f4ac10ee68d57a2966b"
       },
       {
         "path": "skills/k4-plan/assets/protocol.cue",
@@ -76,15 +76,15 @@
       },
       {
         "path": "skills/k4-plan/scripts/materialize",
-        "sha256": "44b5a119c216ee3e9013e5860e0e6f58aab7b3248afa72d433f4c248e0022a53"
+        "sha256": "a8671e30e43780205895379fdaf564d0dbbbccdc0d39f3508447b4574e496b1a"
       },
       {
         "path": "skills/k4-run/SKILL.md",
-        "sha256": "3fc21c876f12a56f059e6ed58415089f5e8d5a5601b84736df172de02d56e01d"
+        "sha256": "6f01bd7d562798d2ef52d2ae51feeebcb353e2b324937f16a26b60185dd2bd20"
       },
       {
         "path": "skills/k4-run/assets/protocol.cue",
-        "sha256": "36254309df9cd7e75e748d814fa28d1e4c566e804c69edee61bb845c958c3e79"
+        "sha256": "30a6054b3960c4e262ba9272b7f23ce7a98db88bbc7cb7ddada4499d031983e9"
       },
       {
         "path": "skills/k4-run/references/protocol.md",
@@ -92,11 +92,11 @@
       },
       {
         "path": "skills/k4-run/scripts/append",
-        "sha256": "c4ab08465ea8b752659dfd449739f4e59b5d05cd5141a811e55568845941433c"
+        "sha256": "f262b4962e0c43ada85ffb6178edf57fe3c375e27e388c4ddfe91570940d7b99"
       },
       {
         "path": "skills/k4-run/scripts/project",
-        "sha256": "3a4e29d163e5c7373452b401297a006bbd9308e2d2b07bd447ac84a2e91f3b3f"
+        "sha256": "e0a0f360a0d256e7a98c75934137209443cd8eb40ff23940255fdf586187e3ed"
       },
       {
         "path": "tests/conformance.py",
@@ -145,6 +145,6 @@
       }
     ]
   },
-  "generated_unix_ms": 1788957848381,
+  "generated_unix_ms": 1788961803247,
   "schema": "k4-work-cycle-manifest/v1"
 }

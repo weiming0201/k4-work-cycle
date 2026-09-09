@@ -10,6 +10,8 @@ state will be judged.
 
 ## Boundary
 
+- First locate one exact stable Align. If none exists or selection is
+  ambiguous, stop and route to `k4-align`; do not draft a Goal.
 - Bind one exact Align and select only its `goal-candidate` items.
 - Freeze the current baseline, predicted terminal state, evidence cutoff,
   acceptance points, bounded judges, available tools, authority, resources,
@@ -40,6 +42,8 @@ and cancelled stops, and the incomplete deliverable. These are limits on a
 later attempt, not operations.
 
 ## Materialize
+
+Before authoring the temporary input, run `scripts/materialize --help` and use its output as the only field vocabulary.
 
 Write only a temporary semantic JSON input, then invoke:
 

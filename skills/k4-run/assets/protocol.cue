@@ -160,16 +160,6 @@ _sortedPlanAcceptance: list.SortStrings(_planAcceptanceIDs)
 _sortedPlanAcceptance: list.SortStrings(_pointIDs)
 _sortedPlanControls:   list.SortStrings(_planControlIDs)
 _sortedPlanControls:   list.SortStrings(_controlIDs)
-for entry in _plan.value.document.coverage.acceptance {
-	_expected: [for operation in _plan.value.document.operations if list.Contains(operation.satisfies, entry.point_id) {operation.operation_id}]
-	_actual: entry.operation_ids
-	_actual: _expected
-}
-for entry in _plan.value.document.coverage.controls {
-	_expected: [for operation in _plan.value.document.operations if list.Contains(operation.controlled_by, entry.control_id) {operation.operation_id}]
-	_actual: entry.operation_ids
-	_actual: _expected
-}
 _planChecks: {
 	_planAcceptanceIDs: [for entry in _plan.value.document.coverage.acceptance {entry.point_id}]
 	_planControlIDs: [for entry in _plan.value.document.coverage.controls {entry.control_id}]
@@ -177,16 +167,16 @@ _planChecks: {
 	_sortedPlanAcceptance: list.SortStrings(_pointIDs)
 	_sortedPlanControls:   list.SortStrings(_planControlIDs)
 	_sortedPlanControls:   list.SortStrings(_controlIDs)
-	for entry in _plan.value.document.coverage.acceptance {
+	_acceptanceCoverage: [for entry in _plan.value.document.coverage.acceptance {
 		_expected: [for operation in _plan.value.document.operations if list.Contains(operation.satisfies, entry.point_id) {operation.operation_id}]
 		_actual: entry.operation_ids
 		_actual: _expected
-	}
-	for entry in _plan.value.document.coverage.controls {
+	}]
+	_controlCoverage: [for entry in _plan.value.document.coverage.controls {
 		_expected: [for operation in _plan.value.document.operations if list.Contains(operation.controlled_by, entry.control_id) {operation.operation_id}]
 		_actual: entry.operation_ids
 		_actual: _expected
-	}
+	}]
 }
 
 _events: [...#EventEnvelope] & context.events

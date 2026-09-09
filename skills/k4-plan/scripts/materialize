@@ -5,6 +5,35 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 skill_dir=$(dirname -- "$script_dir")
 tool=${K4_STABLE_RESULT:-}
 
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage: materialize --input FILE --output FILE --bind goal=FILE' \
+        '' \
+        'Create one immutable Plan DAG from temporary semantic JSON and one exact Goal.' \
+        '' \
+        'Options:' \
+        '  --input FILE      JSON object with the semantic fields below' \
+        '  --output FILE     absent output path whose parent already exists' \
+        '  --bind goal=FILE  exact predecessor Goal' \
+        '' \
+        'Semantic input:' \
+        '  difference: nonempty baseline-to-target statement' \
+        '  route: {claim, supporting_refs, counter_refs}' \
+        '  operations[]: {depends_on_indices, satisfies, controlled_by, tool_ref,' \
+        '    responsible_ref, read_refs, write_refs, permission_refs, resource_refs,' \
+        '    maximum_side_effects, pre_checks, post_checks, idempotency,' \
+        '    retry_limit, recovery}' \
+        '  parallel_groups[]: {operation_indices, reason, guards}' \
+        '  blockers, unknowns' \
+        '' \
+        'Indices are zero-based and may reference only earlier operations.' \
+        '' \
+        'Output:' \
+        '  The stable Plan is stored in the output envelope under document.' \
+        'Exit status: 0 on materialization; 1 on invalid input or unsafe write.'
+    exit 0
+fi
+
 if [ -z "$tool" ]; then
     tool=$(command -v stable-result || true)
 fi

@@ -10,6 +10,8 @@ to its predicted terminal state.
 
 ## Boundary
 
+- First locate one exact frozen Goal. If none exists or selection is
+  ambiguous, stop and route to `k4-goal`; do not draft a Plan.
 - Bind one exact frozen Goal.
 - Select Tool references only from the Goal's `available_tools`.
 - Give every operation explicit dependencies, acceptance and control mappings,
@@ -39,6 +41,8 @@ have no dependency path, and state both the reason and concrete guards. Record
 blockers and unknowns rather than inventing an operation that hides them.
 
 ## Materialize
+
+Before authoring the temporary input, run `scripts/materialize --help` and use its output as the only field vocabulary.
 
 Write only a temporary semantic JSON input, then invoke:
 

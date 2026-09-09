@@ -5,6 +5,41 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 skill_dir=$(dirname -- "$script_dir")
 tool=${K4_STABLE_RESULT:-}
 
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage: append --input FILE --log FILE --bind goal=FILE --bind plan=FILE' \
+        '' \
+        'Append one immutable Run event from temporary semantic JSON.' \
+        '' \
+        'Options:' \
+        '  --input FILE      JSON object containing exactly one event below' \
+        '  --log FILE        append-only JSONL ledger; may be absent initially' \
+        '  --bind goal=FILE  exact frozen Goal' \
+        '  --bind plan=FILE  exact executable Plan' \
+        '' \
+        'Event inputs:' \
+        '  operation-result: {kind, operation_id, result, eligibility_refs,' \
+        '    actual_output_refs, evidence_refs, trace_refs, invariant_checks,' \
+        '    deferred_issues}' \
+        '  invariant_checks[]: {control_id, result, actual_refs, trace_refs,' \
+        '    comparison_refs, evidence_refs}' \
+        '  deferred_issues[]: {kind, statement, evidence_refs}' \
+        '  acceptance-result: {kind, point_id, result, actual_refs,' \
+        '    comparison_refs, evidence_refs}' \
+        '  control-result: {kind, control_id, result, actual_refs, trace_refs,' \
+        '    comparison_refs, evidence_refs}' \
+        '  stop: {kind, stop_state, budget_evidence_refs,' \
+        '    side_effect_evidence_refs, evidence_refs, resume_ref}' \
+        '  result: pass | Finding | unknown' \
+        '  stop_state: completed | paused | failed | cancelled' \
+        '' \
+        'Output:' \
+        '  One generated event is appended to the JSONL log.' \
+        '' \
+        'Exit status: 0 after one append; 1 without append on invalid input.'
+    exit 0
+fi
+
 if [ -z "$tool" ]; then
     tool=$(command -v stable-result || true)
 fi

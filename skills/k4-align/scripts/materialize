@@ -5,6 +5,41 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 skill_dir=$(dirname -- "$script_dir")
 tool=${K4_STABLE_RESULT:-}
 
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage: materialize --input FILE --output FILE (--null-bind previous_align | --bind previous_align=FILE)' \
+        '' \
+        'Create one immutable Align document from temporary semantic JSON.' \
+        '' \
+        'Options:' \
+        '  --input FILE    JSON object with the semantic fields below' \
+        '  --output FILE   absent output path whose parent already exists' \
+        '  --null-bind previous_align' \
+        '                  bootstrap without a predecessor' \
+        '  --bind previous_align=FILE' \
+        '                  iterate from the exact prior Align' \
+        '' \
+        'Semantic input:' \
+        '  mode: bootstrap | iterate' \
+        '  subject, boundary, cutoff: nonempty strings' \
+        '  source_refs: unique nonempty strings' \
+        '  delta: {summary, evidence_refs}' \
+        '  items[]: {change, previous_item_id, change_reason, state,' \
+        '            statement, evidence_refs, route, route_ref}' \
+        '  retired[]: {previous_item_id, reason, evidence_refs}' \
+        '  change: retained | changed | added' \
+        '  state: aligned | gap | conflict | unknown' \
+        '  route: none | goal-candidate | retain | external' \
+        '  previous_item_id: null for added items and all bootstrap items' \
+        '  route_ref: required only for external; null for every other route' \
+        '' \
+        'Output:' \
+        '  The stable Align is stored in the output envelope under document.' \
+        '' \
+        'Exit status: 0 on materialization; 1 on invalid input or unsafe write.'
+    exit 0
+fi
+
 if [ -z "$tool" ]; then
     tool=$(command -v stable-result || true)
 fi

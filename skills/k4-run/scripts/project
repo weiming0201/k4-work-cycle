@@ -5,6 +5,25 @@ script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
 skill_dir=$(dirname -- "$script_dir")
 tool=${K4_STABLE_RESULT:-}
 
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage: project --log FILE --output FILE --bind goal=FILE --bind plan=FILE' \
+        '' \
+        'Create one current Run projection from an append-only event log.' \
+        '' \
+        'Options:' \
+        '  --log FILE        append-only JSONL event log' \
+        '  --output FILE     absent projection path whose parent already exists' \
+        '  --bind goal=FILE  exact frozen Goal' \
+        '  --bind plan=FILE  exact executable Plan' \
+        '' \
+        'Output:' \
+        '  The current Run view is stored in the output envelope under document.' \
+        '' \
+        'Exit status: 0 on projection; 1 on invalid log, binding, or unsafe write.'
+    exit 0
+fi
+
 if [ -z "$tool" ]; then
     tool=$(command -v stable-result || true)
 fi

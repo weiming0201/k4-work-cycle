@@ -9,6 +9,9 @@ Use this Skill only to execute the frozen Plan and record what actually happens.
 
 ## Boundary
 
+- First locate one exact frozen Goal and its exact executable Plan. If either
+  is absent, ambiguous, or not mutually bound, stop and route to the earliest
+  missing predecessor; do not execute work.
 - Bind one exact frozen Goal and its exact executable Plan.
 - Before each operation, recheck the Plan dependencies, Tool, readable and
   writable positions, permissions, resources, checks, budget, effects, and
@@ -43,6 +46,8 @@ present. Acceptance can pass only after its mapped operations pass. Append no
 event after stop.
 
 ## Append and project
+
+Before authoring an event input, run `scripts/append --help` and use its output as the only field vocabulary.
 
 Write one temporary semantic event input after the corresponding action or
 judgment, then invoke:

@@ -41,6 +41,8 @@ retired items cite evidence from this iteration.
 
 ## Materialize
 
+Before authoring the temporary input, run `scripts/materialize --help` and use its output as the only field vocabulary.
+
 Write only a temporary semantic JSON input, then invoke:
 
 ```text
