@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+skill_dir=$(dirname -- "$script_dir")
+tool=${K4_STABLE_RESULT:-}
+
+if [ -z "$tool" ]; then
+    tool=$(command -v stable-result || true)
+fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
+    tool="$skill_dir/../../tools/stable-result"
+fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
+    tool="$skill_dir/../../workspace/tools/stable-result"
+fi
+if [ -z "$tool" ]; then
+    echo "stable-result is not available" >&2
+    exit 1
+fi
+
+exec "$tool" --contract "$skill_dir/assets/protocol.cue" materialize "$@"

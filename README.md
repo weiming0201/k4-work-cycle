@@ -1,42 +1,55 @@
-# K4 Work Cycle Skills
+# K4 Work Cycle Agent Extension
 
-This Resource provides four peer Agent Skills:
+This Resource packages four different document protocols as four peer Agent
+Skills:
 
-- `k4-align`: reconcile a bounded current situation and expose possible next
-  Goal inputs;
-- `k4-goal`: freeze selected Align items as result acceptance, execution, and
-  control contracts;
-- `k4-plan`: freeze one guarded operation DAG for one exact Goal;
-- `k4-run`: attempt one exact Plan and freeze operation, acceptance, and
-  control results.
+- `k4-align`: iterates a full account of the current evidenced situation;
+- `k4-goal`: freezes one set of terminal-state audit points;
+- `k4-plan`: freezes one operation DAG between baseline and predicted terminal
+  state;
+- `k4-run`: appends actual execution events and projects current Run state.
 
-Their dependency is intentionally asymmetric:
+Read [`WORKFLOW.md`](./WORKFLOW.md) for the common semantics and
+[`DESIGN.md`](./DESIGN.md) for the implementation boundary.
 
-```text
-Align [optional exact Run binding]
-  -> Goal [exact Align binding]
-  -> Plan [exact Goal binding]
-  -> Run  [exact Goal and Plan bindings]
-  -> Align
-```
-
-[`DESIGN.md`](./DESIGN.md) defines the shared boundary. Each Skill contains its
-own Rust binary source under `scripts/`; [`kernel`](./kernel) provides only
-shared deterministic parsing, validation, hashing, binding, ID derivation, and
-atomic output code.
-
-Build without writing into the Resource tree:
+## Source layout
 
 ```text
-CARGO_TARGET_DIR=<external-target-dir> cargo build --offline --manifest-path kernel/Cargo.toml
+WORKFLOW.md
+DESIGN.md
+README.md
+manifest.cue
+manifest.json
+tools/stable-result
+skills/
+  k4-align/{SKILL.md,assets/,references/,scripts/}
+  k4-goal/{SKILL.md,assets/,references/,scripts/}
+  k4-plan/{SKILL.md,assets/,references/,scripts/}
+  k4-run/{SKILL.md,assets/,references/,scripts/}
+tests/conformance.py
 ```
 
-Run the end-to-end contract harness with:
+The only fixed executable dependency is `cue v0.17.1`. The shared Tool has no
+stage semantics; each Skill supplies its own CUE contract.
+
+## Mechanical interface
+
+The Skill-local scripts are the public entrypoints. Align, Goal, and Plan each
+materialize a new immutable document. Run appends one event at a time and
+projects the ledger into a regenerable derived view. Every stable output is
+written by the shared Tool; semantic JSON supplied by an Agent remains
+temporary input.
+
+Run the preserved contract cases from the Resource root:
 
 ```text
-CARGO_TARGET_DIR=<external-target-dir> cargo test --offline --manifest-path kernel/Cargo.toml
+python3 tests/conformance.py
 ```
 
-Mechanical
-success proves the declared schemas and bindings only. It does not prove
-semantic sufficiency, external authority, evidence truth, or wise action.
+The conformance test uses isolated temporary directories and must not write build
+artifacts into this Resource.
+
+Mechanical validation proves only the declared structure, bindings, write
+semantics, and state-transition rules. It does not prove that source evidence
+is true, the chosen Goal or Plan is sufficient, or an external action was
+authorized.

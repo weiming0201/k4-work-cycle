@@ -1,46 +1,56 @@
 ---
 name: k4-plan
-description: Turn one exact frozen K4 Goal into one selected route and guarded operation DAG that covers its acceptance and control contracts. Use after k4-goal; do not use it to change Goal contracts, execute operations, or claim results.
+description: Freeze one exact Goal into a single-use operation DAG with explicit dependencies, tools, readable and writable positions, permissions, resources, checks, concurrency guards, and recovery. Use after k4-goal and before execution; do not perform the operations or revise the Goal.
 ---
 
 # K4 Plan
 
-Plan defines the operation dependency relation for attempting one exact Goal.
-Goal owns what must pass and remain controlled; Plan owns the route, operations,
-dependencies, and explicit parallel possibilities.
+Use this Skill only to freeze the permitted transition from the Goal baseline
+to its predicted terminal state.
 
-## Input and boundary
+## Boundary
 
-Input one `k4-goal-result/v2` with `status=frozen`. Define a flat list of
-operations. Each operation declares earlier dependencies, the Goal acceptance
-points it helps satisfy, the Goal controls it obeys, its Action or Tool,
-responsible executor, inputs, outputs, permissions, resources, maximum effects,
-checks, retry ceiling, and recovery.
+- Bind one exact frozen Goal.
+- Select Tool references only from the Goal's `available_tools`.
+- Give every operation explicit dependencies, acceptance and control mappings,
+  responsible executor, readable and writable positions, permission and
+  resource references, maximum effects, checks, retry ceiling, and recovery.
+- Treat missing dependency edges as unknown concurrency. Parallelism exists
+  only in an explicit guarded group with no dependency path.
+- Do not change Goal audit points, execute an operation, record actual results,
+  or repair missing authority.
 
-An operation may satisfy several acceptance points; several operations may
-satisfy one point; an enabling operation may satisfy none. An executable Plan
-must collectively cover every acceptance point and every control contract.
-Plan never copies or alters their criteria.
+## Form the semantic input
 
-Dependencies express necessary precedence. Lack of a dependency does not grant
-parallel execution. A parallel group must identify its operations and state why
-their writes, resources, evidence, permissions, and effects can coexist. Plan
-stores the selected route, not discarded exploration or execution results.
+State the falsifiable difference between baseline and target, the selected
+route, supporting evidence, and counterevidence. Then define the operation DAG.
+For every operation provide:
 
-## Stable result
+- earlier operation indices that it depends on;
+- Goal acceptance points and controls it serves;
+- one Tool already available in the Goal and its responsible executor;
+- complete readable and writable positions, permissions, resources, and
+  maximum effects;
+- pre-checks, post-checks, idempotency, retry ceiling, and recovery position.
 
-Read [the result contract](references/result-contract.md), author only its
-temporary semantic input, then call this generator from the Skill root:
+Use an explicit `none:` reference when a boundary is intentionally empty;
+silence is not a boundary. Declare parallel groups only when their operations
+have no dependency path, and state both the reason and concrete guards. Record
+blockers and unknowns rather than inventing an operation that hides them.
+
+## Materialize
+
+Write only a temporary semantic JSON input, then invoke:
 
 ```text
-cargo run --offline --manifest-path ../../kernel/Cargo.toml --bin k4-plan-result -- generate --goal <goal-result.json> --input <semantic-input.json> --output <absent-result.json>
+scripts/materialize --input <semantic-input.json> --output <absent-plan.json> --bind goal=<goal.json>
 ```
 
-Rust validates the Goal, generates the exact binding, operation IDs, dependency
-IDs and reverse coverage indexes, checks the DAG and guarded parallel groups,
-and creates time, status, digest, canonical bytes, and absent output. Do not
-hand-author or patch stable JSON.
+The script calls the shared deterministic Tool with this Skill's CUE contract.
+Any route, operation, dependency, Tool, or boundary change requires a new Plan.
+Do not hand-author or patch the stable DAG.
 
-Use a blocker for a known missing execution condition and an unknown when
-available evidence cannot decide it. Run may consume only
-`status=executable`.
+Do not read `assets/protocol.cue`, the shared Tool, or other implementation
+source before or during normal use. If materialization refuses the input,
+correct the stated semantic omission or contradiction from its error and this
+Skill; do not reverse-engineer the mechanical contract.

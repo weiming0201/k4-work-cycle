@@ -1,51 +1,67 @@
 ---
 name: k4-run
-description: Attempt only the eligible operations of one exact executable K4 Plan and freeze separate operation, acceptance, and control results. Use after k4-plan; do not use it to replan, broaden authority, reuse old evidence silently, adopt outputs, or choose the next Goal.
+description: Execute only one exact Goal and Plan by appending actual operation, acceptance, control, and stop events to a chained ledger and mechanically projecting current state. Use after k4-plan; do not replan, widen authority, overwrite events, adopt output, or choose the next Goal.
 ---
 
 # K4 Run
 
-Run attempts one exact Goal through one exact Plan. It preserves what actually
-ran, what result criteria passed, what controls held, and where a non-completed
-attempt can resume.
+Use this Skill only to execute the frozen Plan and record what actually happens.
 
-## Input and boundary
+## Boundary
 
-Input one frozen `k4-goal-result/v2` and one executable
-`k4-plan-result/v2` bound to those exact Goal bytes. Before each operation,
-recheck its dependencies, inputs, permissions, resources, pre-checks, budget,
-maximum effects, and applicable invariant controls. Invoke only its declared
-`action_ref`; a changed action, dependency, or route requires a new Plan.
+- Bind one exact frozen Goal and its exact executable Plan.
+- Before each operation, recheck the Plan dependencies, Tool, readable and
+  writable positions, permissions, resources, checks, budget, effects, and
+  applicable controls.
+- Append one event for one actual operation result, acceptance judgment,
+  terminal-control judgment, or stop. Operation events carry every invariant
+  control check required for that operation.
+- Record every potential unresolved issue in that operation's
+  `deferred_issues`; do not investigate, repair, prioritize, route, or act on
+  it inside the current Run.
+- Treat the event ledger as history and the projection as reconstructible
+  current state. Never edit an event or treat a projection as history.
+- Stop when the Plan cannot govern the next action. Do not silently change the
+  route, Tool, dependency, path, Goal, or authorization.
 
-Record separately and exactly once:
+## Form one semantic event
 
-- every Plan operation and its eligibility, output, evidence, and trace;
-- every Goal acceptance point and its actual/comparison evidence; and
-- every Goal control and its actual/trace/comparison evidence.
+After exactly one governed increment, form exactly one event:
 
-Use `pass`, `Finding`, `unknown`, or `not-run`. An operation cannot run after a
-non-pass dependency. Acceptance cannot pass until all mapped operations pass.
-An invariant control cannot remain `not-run` after a governed operation runs;
-a terminal control may remain pending until the terminal check.
+- an operation result identifies the Plan operation, eligibility, actual
+  outputs, evidence, trace, result, every applicable invariant-control check,
+  and all deferred Findings or unknowns;
+- an acceptance result identifies one Goal point and records actual value,
+  comparison, evidence, and bounded judgment;
+- a terminal-control result records the same for one terminal control;
+- a stop records the actual completed, paused, failed, or cancelled state,
+  budget and side-effect evidence, and a resume point unless completed.
 
-Run does not adopt output or choose what happens next. It does not silently
-carry evidence from an older Run. Its stable result may become input to a new
-Align.
+Do not append `not-run`; it is derived from absence. An operation can pass only
+after its dependencies pass and its required evidence and invariant checks are
+present. Acceptance can pass only after its mapped operations pass. Append no
+event after stop.
 
-## Stable result
+## Append and project
 
-Read [the result contract](references/result-contract.md), author only its
-temporary semantic input from actual execution evidence, then call this
-generator from the Skill root:
+Write one temporary semantic event input after the corresponding action or
+judgment, then invoke:
 
 ```text
-cargo run --offline --manifest-path ../../kernel/Cargo.toml --bin k4-run-result -- generate --goal <goal-result.json> --plan <plan-result.json> --input <semantic-input.json> --output <absent-result.json>
+scripts/append --input <event-input.json> --log <run.jsonl> --bind goal=<goal.json> --bind plan=<plan.json>
 ```
 
-Rust validates both predecessors and their binding, copies control timing from
-Goal, checks complete coverage and dependency/control rules, derives the
-aggregate result, and creates time, bindings, digest, canonical bytes, and
-absent output. Do not hand-author or patch stable JSON.
+Generate a current derived view at an absent path with:
 
-Stop instead of invoking an ineligible operation. Every non-completed stop must
-retain an exact resume reference.
+```text
+scripts/project --log <run.jsonl> --output <absent-projection.json> --bind goal=<goal.json> --bind plan=<plan.json>
+```
+
+The shared Tool creates sequence, time, predecessor and content identities,
+locks and appends the ledger, and invokes this Skill's CUE contract. Do not
+hand-author, patch, reorder, truncate, or replace stable Run events.
+
+Do not read `assets/protocol.cue`, the shared Tool, or other implementation
+source before or during normal use. If append or projection refuses the input,
+correct the stated semantic omission or contradiction from its error and this
+Skill; do not reverse-engineer the mechanical contract.

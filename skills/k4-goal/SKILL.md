@@ -1,47 +1,57 @@
 ---
 name: k4-goal
-description: Freeze selected K4 Align goal-candidate items into one bounded result-acceptance set, execution envelope, and control set before planning. Use after k4-align; do not use it to select a route, order work, execute operations, or adopt results.
+description: Freeze one exact Align selection into a single-use contract for the current baseline, predicted terminal state, audit points, available tools, authority, resources, controls, and stop conditions. Use before planning a goal-scale attempt; do not choose operations or execute work.
 ---
 
 # K4 Goal
 
-Goal defines what one bounded increment must produce and what its execution
-must remain within. It does not describe how to do the work.
+Use this Skill only to freeze what one attempt must achieve and how its terminal
+state will be judged.
 
-## Input and boundary
+## Boundary
 
-Input exactly one `k4-align-result/v1` and select one or more items routed as
-`goal-candidate`. Freeze:
+- Bind one exact Align and select only its `goal-candidate` items.
+- Freeze the current baseline, predicted terminal state, evidence cutoff,
+  acceptance points, bounded judges, available tools, authority, resources,
+  budget, maximum effects, controls, and all stop outcomes.
+- Keep acceptance about the resulting state and control about execution
+  variables. Neither is an operation.
+- Do not choose an implementation route, form a DAG, execute work, admit
+  post-cutoff evidence, or revise a frozen Goal.
 
-- acceptance points for observable result claims;
-- control contracts for execution variables that must remain in bounds; and
-- one execution envelope for authority, resources, budget, effects, stopping,
-  and incomplete delivery.
+## Form the semantic input
 
-Every acceptance point states its conditions, observation window, expected
-result, falsifier, comparison method, evidence, and judge. Every control states
-its controlled variable, allowed domain, forbidden drift, trace, check method,
-check timing, non-pass route, evidence, and judge. `invariant` means the control
-must be checked while governed operations run; `terminal` means it is checked
-at the final boundary.
+Select the exact Goal-candidate item IDs from the bound Align. State the
+objective, target, source and baseline references, evidence cutoff, scope,
+non-goals, blockers, and unknowns.
 
-Acceptance judges the result. Control keeps execution within a declared
-domain. The execution envelope bounds the whole attempt. None selects a route,
-operation, dependency, or actual executor.
+For each acceptance point state what is observable, the conditions and window,
+the expected value, what would falsify it, how evidence is sampled and
+compared, the required evidence, and a bounded judge. A judge is self,
+independent agent, script, or human; its kind never expands its claim limit.
 
-## Stable result
+Separately state every execution control: controlled variable, allowed domain,
+forbidden drift, required trace and evidence, check method, invariant or
+terminal timing, bounded judge, and non-pass response.
 
-Read [the result contract](references/result-contract.md), author only its
-temporary semantic input, then call this generator from the Skill root:
+Freeze the execution envelope: authorization and its claim limit, available
+Tools, resources, budget, maximum effects, distinct completed, paused, failed,
+and cancelled stops, and the incomplete deliverable. These are limits on a
+later attempt, not operations.
+
+## Materialize
+
+Write only a temporary semantic JSON input, then invoke:
 
 ```text
-cargo run --offline --manifest-path ../../kernel/Cargo.toml --bin k4-goal-result -- generate --align <align-result.json> --input <semantic-input.json> --output <absent-result.json>
+scripts/materialize --input <semantic-input.json> --output <absent-goal.json> --bind align=<align.json>
 ```
 
-Rust verifies the selected Align items and generates the exact binding,
-acceptance and control IDs, time, status, digest, canonical bytes, and absent
-output. Do not hand-author or patch stable JSON.
+The script calls the shared deterministic Tool with this Skill's CUE contract.
+Any semantic change requires a new output file. Do not hand-author or patch the
+stable Goal.
 
-Use a blocker for a known reason the Goal cannot freeze and an unknown for
-missing evidence that prevents judgment. Plan may consume only
-`status=frozen`.
+Do not read `assets/protocol.cue`, the shared Tool, or other implementation
+source before or during normal use. If materialization refuses the input,
+correct the stated semantic omission or contradiction from its error and this
+Skill; do not reverse-engineer the mechanical contract.

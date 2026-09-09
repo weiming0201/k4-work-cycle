@@ -1,0 +1,600 @@
+#!/usr/bin/env python3
+"""Stage-neutral deterministic I/O for CUE-defined K4 documents."""
+
+from __future__ import annotations
+
+import argparse
+import fcntl
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+import time
+from typing import Any
+
+
+EXPECTED_CUE = "v0.17.1"
+DOCUMENT_KEYS = {
+    "schema",
+    "generated_unix_ms",
+    "content_sha256",
+    "bindings",
+    "document",
+}
+EVENT_KEYS = {
+    "schema",
+    "sequence",
+    "recorded_unix_ms",
+    "previous_event_sha256",
+    "content_sha256",
+    "event_sha256",
+    "bindings",
+    "event",
+}
+
+
+class Refusal(Exception):
+    pass
+
+
+def canonical_bytes(value: Any) -> bytes:
+    return (
+        json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n"
+    ).encode("utf-8")
+
+
+def canonical_line(value: Any) -> bytes:
+    return (
+        json.dumps(
+            value,
+            ensure_ascii=False,
+            separators=(",", ":"),
+            sort_keys=True,
+        )
+        + "\n"
+    ).encode("utf-8")
+
+
+def digest(value: bytes) -> str:
+    return hashlib.sha256(value).hexdigest()
+
+
+def lowercase_digest(value: Any, label: str) -> str:
+    if (
+        not isinstance(value, str)
+        or len(value) != 64
+        or any(character not in "0123456789abcdef" for character in value)
+    ):
+        raise Refusal(f"{label} must be 64 lowercase hexadecimal characters")
+    return value
+
+
+def load_json(path: Path, label: str) -> Any:
+    try:
+        return json.loads(path.read_bytes())
+    except (OSError, json.JSONDecodeError) as error:
+        raise Refusal(f"cannot read {label} {path}: {error}") from error
+
+
+def public_bindings(bindings: dict[str, dict[str, Any]]) -> dict[str, Any]:
+    return {name: value["binding"] for name, value in bindings.items()}
+
+
+def document_content_sha256(value: dict[str, Any]) -> str:
+    return digest(
+        canonical_bytes(
+            {
+                "bindings": value["bindings"],
+                "document": value["document"],
+            }
+        )
+    )
+
+
+def validate_document_envelope(value: Any, label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != DOCUMENT_KEYS:
+        raise Refusal(f"{label} must have the exact document envelope")
+    if not isinstance(value["schema"], str) or not value["schema"]:
+        raise Refusal(f"{label}.schema must be nonempty text")
+    if (
+        not isinstance(value["generated_unix_ms"], int)
+        or value["generated_unix_ms"] < 0
+    ):
+        raise Refusal(f"{label}.generated_unix_ms must be an unsigned integer")
+    lowercase_digest(value["content_sha256"], f"{label}.content_sha256")
+    if not isinstance(value["bindings"], dict):
+        raise Refusal(f"{label}.bindings must be an object")
+    if not isinstance(value["document"], dict):
+        raise Refusal(f"{label}.document must be an object")
+    expected = document_content_sha256(value)
+    if value["content_sha256"] != expected:
+        raise Refusal(
+            "content_sha256 mismatch: "
+            f"expected={expected} actual={value['content_sha256']}"
+        )
+    return value
+
+
+def event_content_sha256(value: dict[str, Any]) -> str:
+    return digest(
+        canonical_bytes(
+            {
+                "bindings": value["bindings"],
+                "event": value["event"],
+            }
+        )
+    )
+
+
+def event_sha256(value: dict[str, Any]) -> str:
+    unhashed = {key: item for key, item in value.items() if key != "event_sha256"}
+    return digest(canonical_line(unhashed))
+
+
+def validate_event_envelope(
+    value: Any,
+    expected_sequence: int,
+    expected_previous: str | None,
+    label: str,
+) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != EVENT_KEYS:
+        raise Refusal(f"{label} must have the exact event envelope")
+    if not isinstance(value["schema"], str) or not value["schema"]:
+        raise Refusal(f"{label}.schema must be nonempty text")
+    if value["sequence"] != expected_sequence:
+        raise Refusal(
+            f"{label}.sequence must be {expected_sequence}, observed {value['sequence']!r}"
+        )
+    if (
+        not isinstance(value["recorded_unix_ms"], int)
+        or value["recorded_unix_ms"] < 0
+    ):
+        raise Refusal(f"{label}.recorded_unix_ms must be an unsigned integer")
+    if value["previous_event_sha256"] != expected_previous:
+        raise Refusal(
+            f"{label}.previous_event_sha256 does not match the preceding event"
+        )
+    lowercase_digest(value["content_sha256"], f"{label}.content_sha256")
+    lowercase_digest(value["event_sha256"], f"{label}.event_sha256")
+    if not isinstance(value["bindings"], dict):
+        raise Refusal(f"{label}.bindings must be an object")
+    if not isinstance(value["event"], dict):
+        raise Refusal(f"{label}.event must be an object")
+    expected_content = event_content_sha256(value)
+    if value["content_sha256"] != expected_content:
+        raise Refusal(
+            f"{label}.content_sha256 mismatch: "
+            f"expected={expected_content} actual={value['content_sha256']}"
+        )
+    expected_event = event_sha256(value)
+    if value["event_sha256"] != expected_event:
+        raise Refusal(
+            f"{label}.event_sha256 mismatch: "
+            f"expected={expected_event} actual={value['event_sha256']}"
+        )
+    return value
+
+
+def load_log_bytes(raw: bytes, label: str) -> list[dict[str, Any]]:
+    if not raw:
+        return []
+    if not raw.endswith(b"\n"):
+        raise Refusal(f"{label} must end at a complete JSONL record")
+    events: list[dict[str, Any]] = []
+    previous: str | None = None
+    seen_content: set[str] = set()
+    for index, line in enumerate(raw.splitlines()):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise Refusal(f"{label} line {index + 1} is invalid JSON: {error}") from error
+        event = validate_event_envelope(value, index, previous, f"{label} line {index + 1}")
+        if event["content_sha256"] in seen_content:
+            raise Refusal(f"{label} repeats event content at line {index + 1}")
+        seen_content.add(event["content_sha256"])
+        events.append(event)
+        previous = event["event_sha256"]
+    return events
+
+
+def parse_bindings(words: list[str], null_names: list[str]) -> dict[str, dict[str, Any]]:
+    result: dict[str, dict[str, Any]] = {}
+    for name in null_names:
+        if not name or name in result:
+            raise Refusal(f"duplicate or empty binding name: {name!r}")
+        result[name] = {"binding": None, "value": None}
+    for word in words:
+        if "=" not in word:
+            raise Refusal(f"binding must be NAME=PATH: {word}")
+        name, raw_path = word.split("=", 1)
+        if not name or name in result:
+            raise Refusal(f"duplicate or empty binding name: {name!r}")
+        path = Path(raw_path)
+        value = validate_document_envelope(
+            load_json(path, f"binding {name}"),
+            f"binding {name}",
+        )
+        raw = path.read_bytes()
+        result[name] = {
+            "binding": {
+                "ref": f"{value['schema']}#sha256={digest(raw)}",
+                "sha256": digest(raw),
+                "content_sha256": value["content_sha256"],
+            },
+            "value": value,
+        }
+    return result
+
+
+def cue_binary() -> str:
+    path = shutil.which("cue")
+    if path is None:
+        raise Refusal("cue is not available on PATH")
+    probe = subprocess.run(
+        [path, "version"],
+        check=False,
+        capture_output=True,
+        text=True,
+    )
+    first = probe.stdout.splitlines()[0] if probe.stdout else ""
+    if probe.returncode != 0 or first != f"cue version {EXPECTED_CUE}":
+        raise Refusal(
+            f"cue {EXPECTED_CUE} is required; observed "
+            f"{first or probe.stderr.strip()!r}"
+        )
+    return path
+
+
+def evaluate(contract: Path, context: dict[str, Any], expression: str) -> Any:
+    if not contract.is_file():
+        raise Refusal(f"contract does not exist: {contract}")
+    cue = cue_binary()
+    with tempfile.TemporaryDirectory(prefix="k4-stable-result-") as directory:
+        context_path = Path(directory) / "context.json"
+        context_path.write_bytes(canonical_bytes({"context": context}))
+        process = subprocess.run(
+            [
+                cue,
+                "export",
+                str(contract),
+                str(context_path),
+                "--expression",
+                expression,
+                "--out",
+                "json",
+            ],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+    if process.returncode != 0:
+        raise Refusal(process.stderr.strip() or "CUE rejected the value")
+    try:
+        return json.loads(process.stdout)
+    except json.JSONDecodeError as error:
+        raise Refusal(f"CUE returned invalid JSON: {error}") from error
+
+
+def write_absent(path: Path, value: Any) -> None:
+    if not path.parent.is_dir():
+        raise Refusal(f"output parent must already exist: {path.parent}")
+    if path.exists():
+        raise Refusal(f"output must be absent: {path}")
+    descriptor, temporary = tempfile.mkstemp(
+        prefix=f".{path.name}.k4-",
+        suffix=".tmp",
+        dir=path.parent,
+    )
+    try:
+        with os.fdopen(descriptor, "wb") as handle:
+            handle.write(canonical_bytes(value))
+            handle.flush()
+            os.fsync(handle.fileno())
+        os.link(temporary, path)
+    except FileExistsError as error:
+        raise Refusal(f"output must be absent: {path}") from error
+    finally:
+        try:
+            os.unlink(temporary)
+        except FileNotFoundError:
+            pass
+
+
+def pre_document(
+    generated: Any,
+    bindings: dict[str, dict[str, Any]],
+    label: str,
+) -> dict[str, Any]:
+    if not isinstance(generated, dict) or set(generated) != {
+        "schema",
+        "bindings",
+        "document",
+    }:
+        raise Refusal(f"{label} must return schema, bindings, and document")
+    if generated["bindings"] != public_bindings(bindings):
+        raise Refusal(f"{label} changed the supplied predecessor bindings")
+    if not isinstance(generated["schema"], str) or not generated["schema"]:
+        raise Refusal(f"{label}.schema must be nonempty text")
+    if not isinstance(generated["document"], dict):
+        raise Refusal(f"{label}.document must be an object")
+    return generated
+
+
+def materialize(args: argparse.Namespace) -> dict[str, Any]:
+    candidate = load_json(Path(args.input), "semantic input")
+    if not isinstance(candidate, dict):
+        raise Refusal("semantic input must be an object")
+    bindings = parse_bindings(args.bind, args.null_bind)
+    generated = pre_document(
+        evaluate(
+            Path(args.contract),
+            {"input": candidate, "bindings": bindings},
+            args.expression,
+        ),
+        bindings,
+        args.expression,
+    )
+    value = {
+        **generated,
+        "generated_unix_ms": time.time_ns() // 1_000_000,
+        "content_sha256": "",
+    }
+    value["content_sha256"] = document_content_sha256(value)
+    validate_document_envelope(value, "generated document")
+    output = Path(args.output)
+    write_absent(output, value)
+    return {
+        "ok": True,
+        "kind": "document",
+        "schema": value["schema"],
+        "path": str(output),
+        "content_sha256": value["content_sha256"],
+        "file_sha256": digest(output.read_bytes()),
+    }
+
+
+def append_event(args: argparse.Namespace) -> dict[str, Any]:
+    candidate = load_json(Path(args.input), "event semantic input")
+    if not isinstance(candidate, dict):
+        raise Refusal("event semantic input must be an object")
+    bindings = parse_bindings(args.bind, args.null_bind)
+    log = Path(args.log)
+    if not log.parent.is_dir():
+        raise Refusal(f"log parent must already exist: {log.parent}")
+    descriptor = os.open(log, os.O_RDWR | os.O_CREAT, 0o600)
+    try:
+        fcntl.flock(descriptor, fcntl.LOCK_EX)
+        os.lseek(descriptor, 0, os.SEEK_SET)
+        raw = b""
+        while True:
+            chunk = os.read(descriptor, 1024 * 1024)
+            if not chunk:
+                break
+            raw += chunk
+        events = load_log_bytes(raw, str(log))
+        generated = evaluate(
+            Path(args.contract),
+            {
+                "input": candidate,
+                "bindings": bindings,
+                "events": events,
+            },
+            args.expression,
+        )
+        if not isinstance(generated, dict) or set(generated) != {
+            "schema",
+            "bindings",
+            "event",
+        }:
+            raise Refusal(
+                f"{args.expression} must return schema, bindings, and event"
+            )
+        if generated["bindings"] != public_bindings(bindings):
+            raise Refusal(
+                f"{args.expression} changed the supplied predecessor bindings"
+            )
+        if not isinstance(generated["schema"], str) or not generated["schema"]:
+            raise Refusal(f"{args.expression}.schema must be nonempty text")
+        if not isinstance(generated["event"], dict):
+            raise Refusal(f"{args.expression}.event must be an object")
+        value = {
+            **generated,
+            "sequence": len(events),
+            "recorded_unix_ms": time.time_ns() // 1_000_000,
+            "previous_event_sha256": (
+                events[-1]["event_sha256"] if events else None
+            ),
+            "content_sha256": "",
+            "event_sha256": "",
+        }
+        value["content_sha256"] = event_content_sha256(value)
+        if any(
+            event["content_sha256"] == value["content_sha256"]
+            for event in events
+        ):
+            raise Refusal("event content is already present in the ledger")
+        value["event_sha256"] = event_sha256(value)
+        validate_event_envelope(
+            value,
+            len(events),
+            events[-1]["event_sha256"] if events else None,
+            "generated event",
+        )
+        line = canonical_line(value)
+        os.lseek(descriptor, 0, os.SEEK_END)
+        written = os.write(descriptor, line)
+        if written != len(line):
+            raise Refusal("short write while appending the event")
+        os.fsync(descriptor)
+    finally:
+        try:
+            fcntl.flock(descriptor, fcntl.LOCK_UN)
+        finally:
+            os.close(descriptor)
+    return {
+        "ok": True,
+        "kind": "event",
+        "schema": value["schema"],
+        "path": str(log),
+        "sequence": value["sequence"],
+        "content_sha256": value["content_sha256"],
+        "event_sha256": value["event_sha256"],
+        "file_sha256": digest(log.read_bytes()),
+    }
+
+
+def project(args: argparse.Namespace) -> dict[str, Any]:
+    log = Path(args.log)
+    try:
+        events = load_log_bytes(log.read_bytes(), str(log))
+    except OSError as error:
+        raise Refusal(f"cannot read log {log}: {error}") from error
+    bindings = parse_bindings(args.bind, args.null_bind)
+    generated = pre_document(
+        evaluate(
+            Path(args.contract),
+            {"bindings": bindings, "events": events},
+            args.expression,
+        ),
+        bindings,
+        args.expression,
+    )
+    value = {
+        **generated,
+        "generated_unix_ms": time.time_ns() // 1_000_000,
+        "content_sha256": "",
+    }
+    value["content_sha256"] = document_content_sha256(value)
+    validate_document_envelope(value, "generated projection")
+    output = Path(args.output)
+    write_absent(output, value)
+    return {
+        "ok": True,
+        "kind": "projection",
+        "schema": value["schema"],
+        "path": str(output),
+        "content_sha256": value["content_sha256"],
+        "file_sha256": digest(output.read_bytes()),
+    }
+
+
+def validate(args: argparse.Namespace) -> dict[str, Any]:
+    bindings = parse_bindings(args.bind, args.null_bind)
+    if args.document is not None:
+        path = Path(args.document)
+        value = validate_document_envelope(
+            load_json(path, "document"),
+            "document",
+        )
+        checked = evaluate(
+            Path(args.contract),
+            {
+                "existing": value,
+                "bindings": bindings,
+            },
+            args.expression,
+        )
+        if checked != value:
+            raise Refusal("CUE validation projection differs from the document")
+        return {
+            "ok": True,
+            "kind": "document",
+            "schema": value["schema"],
+            "path": str(path),
+            "content_sha256": value["content_sha256"],
+            "file_sha256": digest(path.read_bytes()),
+        }
+    path = Path(args.log)
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise Refusal(f"cannot read log {path}: {error}") from error
+    events = load_log_bytes(raw, str(path))
+    checked = evaluate(
+        Path(args.contract),
+        {
+            "events": events,
+            "bindings": bindings,
+        },
+        args.expression,
+    )
+    if checked != events:
+        raise Refusal("CUE validation projection differs from the event ledger")
+    return {
+        "ok": True,
+        "kind": "ledger",
+        "path": str(path),
+        "events": len(events),
+        "file_sha256": digest(raw),
+    }
+
+
+def add_bindings(command: argparse.ArgumentParser) -> None:
+    command.add_argument("--bind", action="append", default=[])
+    command.add_argument("--null-bind", action="append", default=[])
+
+
+def parser() -> argparse.ArgumentParser:
+    root = argparse.ArgumentParser(prog="stable-result")
+    root.add_argument("--contract", required=True)
+    commands = root.add_subparsers(dest="command", required=True)
+
+    materialize_parser = commands.add_parser("materialize")
+    materialize_parser.add_argument("--input", required=True)
+    materialize_parser.add_argument("--output", required=True)
+    materialize_parser.add_argument("--expression", default="generate")
+    add_bindings(materialize_parser)
+
+    append_parser = commands.add_parser("append")
+    append_parser.add_argument("--input", required=True)
+    append_parser.add_argument("--log", required=True)
+    append_parser.add_argument("--expression", default="next_event")
+    add_bindings(append_parser)
+
+    project_parser = commands.add_parser("project")
+    project_parser.add_argument("--log", required=True)
+    project_parser.add_argument("--output", required=True)
+    project_parser.add_argument("--expression", default="project")
+    add_bindings(project_parser)
+
+    validate_parser = commands.add_parser("validate")
+    target = validate_parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--document")
+    target.add_argument("--log")
+    validate_parser.add_argument("--expression", default="validate")
+    add_bindings(validate_parser)
+
+    return root
+
+
+def main() -> int:
+    try:
+        args = parser().parse_args()
+        if args.command == "materialize":
+            report = materialize(args)
+        elif args.command == "append":
+            report = append_event(args)
+        elif args.command == "project":
+            report = project(args)
+        else:
+            report = validate(args)
+        print(json.dumps(report, ensure_ascii=False, sort_keys=True))
+        return 0
+    except Refusal as error:
+        print(
+            json.dumps(
+                {"ok": False, "error": str(error)},
+                ensure_ascii=False,
+                sort_keys=True,
+            ),
+            file=sys.stderr,
+        )
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

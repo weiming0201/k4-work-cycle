@@ -1,39 +1,58 @@
 ---
 name: k4-align
-description: Reconcile one bounded current situation, or one completed K4 Run, into sourced aligned, gap, conflict, and unknown items before choosing the next Goal. Use at cold start or after k4-run; do not use it to define acceptance criteria or perform corrective work.
+description: Iteratively reconcile one bounded situation into a full sourced account of retained, changed, added, retired, open, conflicting, and unknown items before selecting a new Goal. Use at cold start or after new evidence; do not use it to define acceptance or perform corrective work.
 ---
 
 # K4 Align
 
-Align is the entry and return point of `Align -> Goal -> Plan -> Run -> Align`.
-It freezes what is currently aligned, different, conflicting, or unknown and
-where each item may go next. It does not create a Goal or change the observed
-object.
+Use this Skill only to create the next full account of one bounded situation.
 
-## Input and boundary
+## Boundary
 
-Freeze one subject, observation boundary, cutoff, declared source set, and one
-or more sourced items. A post-Run Align may additionally bind exactly one
-`k4-run-result/v1`; a cold-start or full observation omits it.
+- With no predecessor, create `Align[0]` from one bounded subject and declared
+  evidence set.
+- With a predecessor, bind its exact bytes, supply the evidence delta, and emit
+  a new full account with every prior item retained, changed, or retired and
+  every new item marked added.
+- Preserve facts, source statements, inferences, preferences, and unknowns as
+  distinguishable statements. A route of `goal-candidate` only exposes a
+  possible input; it does not create a Goal.
+- Do not mutate the observed object, write acceptance points, choose a Plan, or
+  reinterpret a failed Run as success.
 
-`goal-candidate` is only a route label. Do not place a desired outcome,
-acceptance criterion, permission, plan, operation, adoption, or write-back in
-an Align item.
+## Form the semantic input
 
-## Stable result
+State the bounded subject, included and excluded observation boundary, evidence
+cutoff, and complete set of source references. Describe this iteration's
+evidence delta. For every current item provide:
 
-Read [the result contract](references/result-contract.md), write its temporary
-semantic input, then call only this Rust generator from the Skill root:
+- whether it is retained, changed, or added;
+- its predecessor when retained or changed;
+- why that continuity relation holds;
+- whether the current statement is aligned, a gap, a conflict, or unknown;
+- the minimum supported statement and its evidence references;
+- whether it exposes a Goal candidate, stays retained, has no route, or points
+  to an external destination.
+
+List every retired predecessor with its reason and delta evidence. At
+bootstrap every item is added and there are no predecessors or retired items.
+On iteration, account for every prior item exactly once. Changed, added, and
+retired items cite evidence from this iteration.
+
+## Materialize
+
+Write only a temporary semantic JSON input, then invoke:
 
 ```text
-cargo run --offline --manifest-path ../../kernel/Cargo.toml --bin k4-align-result -- generate --input <semantic-input.json> --output <absent-result.json> [--run <run-result.json>]
+scripts/materialize --input <semantic-input.json> --output <absent-align.json> (--null-bind previous_align | --bind previous_align=<prior-align.json>)
 ```
 
-Rust alone creates the stable JSON structure, item IDs, optional Run binding,
-time, aggregate status, digest, canonical bytes, and output file. A rejected
-input remains a rejected Candidate; do not hand-author or patch the result.
+The script calls the shared deterministic Tool with this Skill's CUE contract.
+Do not hand-author or patch the stable document. Mechanical success proves the
+declared full projection and delta relation only; it does not prove that the
+declared evidence exhausts reality.
 
-Stop with an `unknown` item when a source, boundary, classification, or route
-cannot be supported. Mechanical success proves only the declared source
-coverage and result structure, not that every relevant fact in reality was
-observed.
+Do not read `assets/protocol.cue`, the shared Tool, or other implementation
+source before or during normal use. If materialization refuses the input,
+correct the stated semantic omission or contradiction from its error and this
+Skill; do not reverse-engineer the mechanical contract.

@@ -1,135 +1,118 @@
-# Align, Goal, Plan, Run
+# K4 Work Cycle Agent Extension Design
 
-> This Resource is derived from the current work-contract responsibilities in
-> `resource-033@bb64afe05f1f7d447ff17ace70113a8671d82566`. It is an external
-> Ability Resource, not part of Agent Frame and not an authority projection of
-> any particular Provider.
+This document fixes the implementation boundary for the semantics in
+[`WORKFLOW.md`](./WORKFLOW.md). `WORKFLOW.md` is the outer semantic
+authority; this document may explain how the current Extension realizes it but
+may not change the four protocols.
 
-## 1. One cycle, four stable results
+## 1. Published unit
 
-The cycle is `Align -> Goal -> Plan -> Run -> Align`.
+The Resource publishes one Agent Extension with six functional parts:
 
-- Align owns the evidenced description and routing of current differences.
-- Goal owns the result acceptance set, execution envelope, and control
-  contracts for one increment.
-- Plan owns one selected route and the operation dependency graph used to
-  attempt that Goal.
-- Run owns the actual operation records and the separate judgments against the
-  Goal's acceptance and control contracts.
+1. one outer `WORKFLOW.md`;
+2. four peer Agent Skills, one for each document protocol;
+3. one shared deterministic Tool;
+4. four stage-local CUE contracts;
+5. one generated Manifest;
+6. one isolated conformance test preserving the established behavioral cases.
 
-These are four Skills, not four Agents, actor roles, mandatory project
-directories, or a Workflow that must always run. A consumer may compose them
-into a Workflow; this Resource does not create that runtime.
+The four Skills are peers. None owns another Skill. Their predecessor bindings
+come from the document cycle, not from a Skill hierarchy. The Extension does
+not create a daemon, a permanent task manager, an actor role, or a fifth stage.
 
-## 2. Binding direction
+## 2. Semantic and mechanical ownership
 
-Align may bind one Run when reconciling an attempt, or no Run for cold-start
-observation. Goal binds one Align and selects only its `goal-candidate` item
-IDs. Plan binds one frozen Goal. Run binds the same Goal and one executable
-Plan already bound to it.
+Each Skill owns only the decisions needed to author its temporary semantic
+candidate. Its local CUE contract owns that protocol's closed fields, enums,
+cross-field conditions, legal predecessor data, derived semantic view, and
+refusal rules.
 
-Each binding contains the predecessor's raw-file SHA-256 and semantic-content
-SHA-256. The immediate consumer verifies the supplied bytes. Binding preserves
-identity; it does not copy authority or predecessor content.
+The shared Tool is stage-neutral. It receives a CUE contract and data; it does
+not contain Align, Goal, Plan, or Run field names or business enums. Its entire
+mechanical surface is:
 
-## 3. Semantic input and mechanical generation
+- `materialize`: validate and create one immutable document at an absent path;
+- `append`: validate and atomically append one event to a chained JSONL ledger;
+- `project`: validate a complete ledger and create one derived view at an
+  absent path;
+- `validate`: revalidate a document or ledger without changing it.
 
-The AI authors temporary semantic input: statements, classifications,
-references, acceptance and control contracts, operation descriptions, and
-actual result claims. That input is process material, not the stable result.
+The Tool owns canonical JSON bytes, content digests, timestamps, event sequence
+and predecessor digests, exclusive creation, append locking, flush, and
+failure-before-write. CUE owns the meaning of the supplied data and resulting
+document.
 
-Rust alone generates the stable envelope and closed structure, schema version,
-timestamp, IDs, predecessor bindings, coverage indexes, control timing,
-aggregate status, digest, canonical serialization, and absent-path output.
-Unknown or extra input fields are rejected. Stable JSON is never hand-patched.
+## 3. Four contracts
 
-Every Skill exposes one type-specific Rust executable with two operations:
+The contracts deliberately have different shapes.
 
-| executable | Skill operation | external check |
-| --- | --- | --- |
-| `k4-align-result` | `generate` | `validate` |
-| `k4-goal-result` | `generate` | `validate` |
-| `k4-plan-result` | `generate` | `validate` |
-| `k4-run-result` | `generate` | `validate` |
+- Align accepts either a null predecessor or one exact prior Align. With a
+  predecessor it checks the declared evidence delta and the retained, changed,
+  added, and retired impact against the emitted full account.
+- Goal accepts one exact Align and materializes immutable audit points,
+  execution boundaries, and control definitions. It never imports evidence
+  after the frozen cutoff.
+- Plan accepts one exact Goal and materializes an immutable operation DAG. It
+  checks references, coverage, acyclicity, explicit path and Tool boundaries,
+  and guarded concurrency.
+- Run accepts one exact Goal, its exact Plan, the existing event ledger, and one
+  candidate event. It checks event eligibility and emits the next event. A
+  separate expression derives the complete current projection from the ledger.
+  Potential unresolved issues remain recorded in their operation event and
+  cannot trigger an unplanned action in that Run.
 
-The Skill calls only its own `generate`. Tests, consumers, and auditors may
-call `validate`. Generation uses the same validator before and after exclusive
-creation of the output.
+An exact predecessor binding includes its schema, raw-file digest, and semantic
+content digest. A binding proves the bytes consumed; it neither copies the
+predecessor's authority nor proves its claims.
 
-## 4. Align boundary
+## 4. Stable and derived state
 
-Align freezes one observation subject, boundary, cutoff, declared source set,
-and sourced items classified as `aligned`, `gap`, `conflict`, or `unknown`.
-Each item routes to `none`, `goal-candidate`, `retain`, or an identified
-external destination.
+Align, Goal, and Plan are immutable materialized documents. An update always
+creates a new file. Run events are immutable appended facts. The Run projection
+is derived and can be regenerated; it must never be treated as a second event
+history.
 
-Align does not define a desired result, acceptance criterion, control method,
-or operation. Source coverage proves only that every declared source was used;
-it cannot prove that the declared source set exhausts reality.
+Temporary semantic inputs are editable work products. Stable structured files
+are generated only by the Tool after the relevant CUE expression accepts the
+input. A stable file is never hand-patched. A rejected candidate remains
+temporary input plus an error report.
 
-## 5. Goal boundary
+Content identity excludes observation time but includes semantic content and
+exact predecessor bindings. File identity includes the complete canonical
+bytes. This separates reproducible meaning from the time a particular file was
+materialized.
 
-Goal freezes three distinct things:
+## 5. Dependency and portability
 
-1. acceptance points state which observable results must pass and how each is
-   falsified and judged;
-2. control contracts state which execution variable must remain within which
-   domain, what drift is forbidden, how it is traced and checked, and whether
-   the check is invariant or terminal;
-3. the execution envelope states authority, resources, budget, maximum side
-   effects, stop conditions, and the incomplete deliverable.
+The fixed external dependency is CUE `v0.17.1`. Every Skill contains a
+standard `SKILL.md`, its own `assets/`, `references/`, and thin
+`scripts/` entrypoints. The entrypoints resolve the shared Tool from the
+installed Extension projection and never reach back into the source repository
+or a Rust workspace.
 
-Acceptance is about the result. Control is about keeping execution within its
-declared domain. Neither is an operation or a route, and neither substitutes
-for the other. A judge is `self`, `independent-agent`, `script`, or `human`
-with an explicit claim limit. Goal does not plan or execute work.
+The source Manifest lists the outer document, the four Skills, the Tool, the
+CUE version, and all published files. It is generated and validated rather than
+hand-maintained as stable JSON. Provider installation creates ordinary file
+copies and records their source identities; source remains authoritative.
 
-## 6. Plan boundary
+## 6. Compatibility boundary
 
-Plan is one flat operation DAG. Each operation declares its dependencies,
-Action or Tool reference, responsible executor, inputs, outputs, permissions,
-resources, maximum effects, checks, retry ceiling, and recovery. It also names
-the Goal acceptance points it helps satisfy and the Goal controls it must obey.
+The replacement must preserve the established content restrictions even where
+the storage shape changes. The conformance test therefore retains the
+existing complete-cycle case and existing refusal classes: occupied output,
+unknown Align selection, missing Goal coverage, unsafe parallel dependency,
+cyclic Plan, corrupted coverage, dependency bypass, premature acceptance,
+unchecked invariant control, incomplete execution coverage, and missing output
+parent.
 
-Rust derives the reverse coverage index. An executable Plan must cover every
-Goal acceptance point and control contract. Multiple operations may satisfy
-one acceptance point; one operation may support multiple points; enabling
-operations may satisfy none. This deliberately prevents a Goal point from
-being mistaken for a Plan node.
+Passing these cases proves only the declared mechanical contracts. It cannot
+prove evidence truth, semantic sufficiency, external authorization, or the
+wisdom of the chosen route.
 
-Dependencies express necessary precedence. Missing dependency edges do not
-grant concurrency. Parallel execution is allowed only through an explicit
-group whose members have no dependency path and whose reason and guards are
-stated. Plan stores the selected route, not discarded exploration or actual
-execution.
+## 7. Codex projection
 
-## 7. Run boundary
-
-Run attempts only the operations already named by the Plan. It records every
-Plan operation, every Goal acceptance point, and every Goal control contract
-exactly once. These records are separate because operation success, result
-acceptance, and control compliance are different claims.
-
-An operation cannot run after a non-pass dependency. An acceptance result
-cannot pass until every mapped operation passes. An invariant control cannot
-remain `not-run` after any operation governed by it has run; a terminal control
-may remain pending until the terminal check. Rust copies the required control
-timing from Goal rather than accepting it from semantic input.
-
-Run does not replan, broaden authority, adopt output, or select the next Goal.
-Its result may become input to a new Align. Version 1 deliberately excludes
-automatic reuse of evidence from an older Run.
-
-## 8. Mechanical and semantic limits
-
-The kernel can prove exact fields, closed enums, nonempty requirements,
-generated IDs, declared-source coverage, exact predecessor bytes, Goal-to-Plan
-coverage, acyclic operation dependencies, guarded parallel structure, complete
-Run coverage, dependency eligibility, mapped-operation prerequisites,
-invariant-control timing, aggregate statuses, digests, and absent atomic output
-creation.
-
-It cannot prove that Align observed everything relevant, Goal contracts are
-semantically sufficient, a Plan route is wise, external authority or evidence
-is genuine, or an action happened merely because a reference was supplied.
-Those remain bounded semantic judgments and external reality checks.
+Codex consumption installs the four Skill directories as ordinary user-level
+copies, installs the shared Tool and `WORKFLOW.md`, and adds only the minimum
+global routing statement needed to require Align, Goal, and Plan before a
+goal-scale Run. A fresh session must discover and call the installed Skills;
+reading the source directory directly is not runtime confirmation.
