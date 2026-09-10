@@ -5,7 +5,7 @@ states the baseline-to-target difference, selection rationale, selected route
 with supporting and counter references, entry operations, operations, blockers,
 and unknowns.
 
-Each operation carries earlier dependency indices, Goal point and control
+Each operation belongs to the normal or abort phase and carries earlier dependency indices, Goal point and control
 identities served, one Goal-authorized tool, executor, complete read/write
 positions, permission and resource references, maximum effects, checks,
 idempotency, retry ceiling, recovery, and exactly two result edges: `pass` and
@@ -25,3 +25,9 @@ and maximum effects within the Goal execution envelope. An independent judge
 cannot also be the responsible executor for the point or control it judges.
 The Plan contains no execution result. Run `scripts/materialize --help` for
 exact input fields.
+
+`on_abort` is global to the Plan. It either selects `preserve-only`, with no
+abort operations, or identifies one abort-phase entry whose finite pass/fail
+route is activated only after an explicit abort confirmation. Edges never
+cross between normal and abort phases. Abort operations may apply controls but
+cannot claim the original Goal acceptance points.

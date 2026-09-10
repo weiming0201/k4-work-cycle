@@ -130,17 +130,6 @@ context: _
 	findings:          uint
 	unknowns:          uint
 })
-#AbortSummary: close({
-	source_ref:                  #Text
-	reason:                      #Text
-	evidence_refs:               #NonEmptyStrings
-	response_mode:               "preserve-only" | "route"
-	planned_response_operations: uint
-	actual_response_operations:  uint
-	passed_response_operations:  uint
-	failed_response_operations:  uint
-	residual_effect_refs:        #NonEmptyStrings
-})
 #Closure: close({
 	acceptance_results: [#Judgment, ...#Judgment]
 	terminal_control_results: [...#Judgment]
@@ -149,9 +138,8 @@ context: _
 	findings: [...#ClosureFinding]
 	unknowns: [...#ClosureUnknown]
 	run_halt: close({
-		trigger:    "plan-complete" | "abort"
+		trigger:    "plan-complete" | "blocked" | "cancelled"
 		resume_ref: null | #Text
-		abort:      null | #AbortSummary
 	})
 	result_disposition:     #Disposition
 	incomplete_deliverable: null | #Incomplete
@@ -163,7 +151,7 @@ context: _
 	closure: #Closure
 })
 #Envelope: close({
-	schema:            "k4-finish-document/v4"
+	schema:            "k4-finish-document/v3"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({
@@ -194,19 +182,18 @@ context: _
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v7"
+	schema:            "k4-plan-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding, ...}
 	document: {
 		status: "executable"
-		on_abort: {mode: "preserve-only" | "route", ...}
-		operations: [{operation_id: #OperationID, phase: "normal" | "abort", ...}, ...]
+		operations: [{operation_id: #OperationID, ...}, ...]
 		...
 	}
 }
 #RunEnvelope: {
-	schema:            "k4-run-projection/v6"
+	schema:            "k4-run-projection/v5"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding, plan: #Binding, ...}
@@ -215,11 +202,9 @@ context: _
 		event_count:              uint & >0
 		ledger_head_event_sha256: #Digest
 		execution_result:         null | #Result
-		abort_confirmation: null | close({source_ref: #Text, reason: #Text, evidence_refs: #NonEmptyStrings, ...})
 		halt: close({
-			trigger:                   "plan-complete" | "abort"
-			side_effect_evidence_refs: #Strings
-			resume_ref:                null | #Text
+			trigger:    "plan-complete" | "blocked" | "cancelled"
+			resume_ref: null | #Text
 			...
 		})
 		operations: [{operation_id: #OperationID, result: #Result | "not-run", ...}, ...]
@@ -365,35 +350,6 @@ _actualOperations: [for operation in _run.value.document.operations if operation
 _notRunOperations: [for operation in _run.value.document.operations if operation.result == "not-run" {operation}]
 _passedOperations: [for operation in _run.value.document.operations if operation.result == "pass" {operation}]
 _failedOperations: [for operation in _run.value.document.operations if operation.result == "fail" {operation}]
-_abortOperations: [for operation in _run.value.document.operations if operation.phase == "abort" {operation}]
-_actualAbortOperations: [for operation in _abortOperations if operation.result != "not-run" {operation}]
-_passedAbortOperations: [for operation in _abortOperations if operation.result == "pass" {operation}]
-_failedAbortOperations: [for operation in _abortOperations if operation.result == "fail" {operation}]
-_abortSummary: null | #AbortSummary
-_abortEvidenceRefs: [...#Text]
-if _run.value.document.halt.trigger == "plan-complete" {
-	_abortSummary: null
-	_abortEvidenceRefs: []
-}
-if _run.value.document.halt.trigger == "abort" {
-	_abortEvidenceRefs: list.Concat([
-		_run.value.document.abort_confirmation.evidence_refs,
-		_run.value.document.halt.evidence_refs,
-		_run.value.document.halt.budget_evidence_refs,
-		_run.value.document.halt.side_effect_evidence_refs,
-	])
-	_abortSummary: close({
-		source_ref:                  _run.value.document.abort_confirmation.source_ref
-		reason:                      _run.value.document.abort_confirmation.reason
-		evidence_refs:               _run.value.document.abort_confirmation.evidence_refs
-		response_mode:               _plan.value.document.on_abort.mode
-		planned_response_operations: len(_abortOperations)
-		actual_response_operations:  len(_actualAbortOperations)
-		passed_response_operations:  len(_passedAbortOperations)
-		failed_response_operations:  len(_failedAbortOperations)
-		residual_effect_refs:        _run.value.document.halt.side_effect_evidence_refs
-	})
-}
 _allAcceptancePass: len([for result in _input.acceptance_results if result.result == "fail" {result}]) == 0
 _allTerminalPass: len([for result in _input.terminal_control_results if result.result == "fail" {result}]) == 0
 _allInvariantPass: len([for result in _run.value.document.invariant_control_results if result.result == "fail" {result}]) == 0
@@ -409,7 +365,6 @@ _allEvidence: list.Concat(list.Concat([
 	[for result in _input.terminal_control_results {result.evidence_refs}],
 	[for finding in _findings {finding.evidence_refs}],
 	[for unknown in _unknowns {unknown.basis_refs}],
-	[_abortEvidenceRefs],
 ]))
 _changeEvidence: list.Concat(list.Concat([
 	[for item in _generatedItems if item.change != "retained" {item.evidence_refs}],
@@ -485,9 +440,6 @@ _generateChecks: {
 	for ref in _input.source_refs {
 		if !list.Contains(_allEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_allEvidence, ref)")}
 	}
-	for ref in _abortEvidenceRefs {
-		if !list.Contains(_input.source_refs, ref) {_invalid: error("abort evidence must be declared in source_refs")}
-	}
 	for ref in _input.delta.evidence_refs {
 		if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 		if !list.Contains(_changeEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_changeEvidence, ref)")}
@@ -542,7 +494,6 @@ _document: #Document & {
 		run_halt: {
 			trigger:    _run.value.document.halt.trigger
 			resume_ref: _run.value.document.halt.resume_ref
-			abort:      _abortSummary
 		}
 		result_disposition:     _input.result_disposition
 		incomplete_deliverable: _input.incomplete_deliverable
@@ -552,7 +503,7 @@ _document: #Document & {
 }
 
 generate: _generateChecks & close({
-	schema:   "k4-finish-document/v4"
+	schema:   "k4-finish-document/v3"
 	bindings: _bindings
 	document: _document
 })
@@ -609,7 +560,6 @@ _existingAllEvidence: list.Concat(list.Concat([
 	[for result in _existing.document.closure.terminal_control_results {result.evidence_refs}],
 	[for finding in _existing.document.closure.findings {finding.evidence_refs}],
 	[for unknown in _existing.document.closure.unknowns {unknown.basis_refs}],
-	[_abortEvidenceRefs],
 ]))
 _existingChangeEvidence: list.Concat(list.Concat([
 	[for item in _existingItems if item.change != "retained" {item.evidence_refs}],
@@ -704,9 +654,6 @@ _validateChecks: {
 	for ref in _existing.document.account.source_refs {
 		if !list.Contains(_existingAllEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_existingAllEvidence, ref)")}
 	}
-	for ref in _abortEvidenceRefs {
-		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("abort evidence must be declared in account.source_refs")}
-	}
 	for ref in _existing.document.account.delta.evidence_refs {
 		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 		if !list.Contains(_existingChangeEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_existingChangeEvidence, ref)")}
@@ -731,7 +678,6 @@ _validateChecks: {
 	if _existing.document.closure.unknowns != _expectedExistingUnknowns {_invalid: error("contract relation rejected: _existing.document.closure.unknowns != _expectedExistingUnknowns")}
 	if _existing.document.closure.run_halt.trigger != _run.value.document.halt.trigger {_invalid: error("contract relation rejected: _existing.document.closure.run_halt.trigger != _run.value.document.halt.trigger")}
 	if _existing.document.closure.run_halt.resume_ref != _run.value.document.halt.resume_ref {_invalid: error("contract relation rejected: _existing.document.closure.run_halt.resume_ref != _run.value.document.halt.resume_ref")}
-	if _existing.document.closure.run_halt.abort != _abortSummary {_invalid: error("run_halt.abort: summary must equal the Plan-owned abort response and exact Run evidence")}
 	if _existing.document.closure.run_head_event_sha256 != _run.value.document.ledger_head_event_sha256 {_invalid: error("contract relation rejected: _existing.document.closure.run_head_event_sha256 != _run.value.document.ledger_head_event_sha256")}
 	if _expectedExistingAttemptResult == "pass" && _existing.document.closure.incomplete_deliverable != null {_invalid: error("contract relation rejected: _expectedExistingAttemptResult == \"pass\" && _existing.document.closure.incomplete_deliverable != null")}
 	if _expectedExistingAttemptResult == "fail" && _existing.document.closure.incomplete_deliverable == null {_invalid: error("contract relation rejected: _expectedExistingAttemptResult == \"fail\" && _existing.document.closure.incomplete_deliverable == null")}

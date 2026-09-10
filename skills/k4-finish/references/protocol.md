@@ -16,6 +16,11 @@ Tool derives operation counts, actual and not-run operations, Findings,
 unknowns, emergency patches, halt, ledger head, and the attempt result from the
 derived Run projection. Unknown is an annotation, not a third routing result.
 
+For an aborted attempt, closure also derives the confirmation source and
+reason, the Plan's response mode, planned and actual abort-response operations,
+their pass/fail counts, and residual-effect evidence. Successful response work
+does not rewrite the attempt as plan-complete.
+
 An attempt passes only when the Run reaches `plan-complete` and every acceptance
 point, terminal control, and invariant control passes. A failed operation may
 therefore be truthfully recovered by its frozen fail route; operation failure

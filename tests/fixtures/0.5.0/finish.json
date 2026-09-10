@@ -1,0 +1,199 @@
+{
+  "bindings": {
+    "goal": {
+      "content_sha256": "f581c1df5bec967af7db56d7a860a4bb2455c9b87f618ca02d5416224d1d127d",
+      "ref": "k4-goal-document/v6#sha256=f15003ae3686fa7bd694a92bcaa6782f7945d3a2b0ed7e8ca152f7a05b018381",
+      "sha256": "f15003ae3686fa7bd694a92bcaa6782f7945d3a2b0ed7e8ca152f7a05b018381"
+    },
+    "plan": {
+      "content_sha256": "2ebfd39de01b66ca23834cfe82fac7f20e14e0dd52747eca9794e5ed0a21b9e6",
+      "ref": "k4-plan-document/v6#sha256=551a7d27b29f1610a82b9cb7dcc5e1da331e21c95ffea6a14a585ba406107d7e",
+      "sha256": "551a7d27b29f1610a82b9cb7dcc5e1da331e21c95ffea6a14a585ba406107d7e"
+    },
+    "previous_account": {
+      "content_sha256": "26ac6ddfeca389528f7531ab199a6d325a29e68cc0d30374e2a063284aedc77a",
+      "ref": "k4-observe-document/v2#sha256=b6860fa04dc1734b5b7b8ea130ddb492cf16e72e06afbd1955a12e67e79e135d",
+      "sha256": "b6860fa04dc1734b5b7b8ea130ddb492cf16e72e06afbd1955a12e67e79e135d"
+    },
+    "run": {
+      "content_sha256": "ef6634b69cb3125f742bfb4db0f7bf2f6782c23c65b83b4962cc3d605203cf85",
+      "ref": "k4-run-projection/v5@jsonl#sha256=ef6634b69cb3125f742bfb4db0f7bf2f6782c23c65b83b4962cc3d605203cf85",
+      "sha256": "ef6634b69cb3125f742bfb4db0f7bf2f6782c23c65b83b4962cc3d605203cf85"
+    }
+  },
+  "content_sha256": "850302c67d8ea6d641ae3f13fca3b05db47ed207e53fb17a4de55814f25b7bae",
+  "document": {
+    "account": {
+      "boundary": "only the isolated repository fixture",
+      "cutoff": "after Run halt",
+      "delta": {
+        "evidence_refs": [
+          "run://ledger"
+        ],
+        "summary": "the bounded attempt was settled"
+      },
+      "items": [
+        {
+          "change": "changed",
+          "change_reason": "Run produced acceptance evidence",
+          "epistemic_kind": "fact",
+          "evidence_refs": [
+            "run://ledger"
+          ],
+          "item_id": "item-06baf837845d29cd",
+          "lens": "delivery",
+          "previous_item_id": "item-e84d0189dc3b73ee",
+          "route": "none",
+          "route_ref": null,
+          "state": "aligned",
+          "statement": "the expected result exists and validates"
+        },
+        {
+          "change": "retained",
+          "change_reason": "the source statement remains current",
+          "epistemic_kind": "source-statement",
+          "evidence_refs": [
+            "asset://repo"
+          ],
+          "item_id": "item-d90b5e0ca744e4b8",
+          "lens": "structure",
+          "previous_item_id": "item-d90b5e0ca744e4b8",
+          "route": "retain",
+          "route_ref": null,
+          "state": "aligned",
+          "statement": "the fixture boundary is addressable"
+        }
+      ],
+      "lens_index": [
+        {
+          "item_ids": [
+            "item-06baf837845d29cd"
+          ],
+          "lens": "delivery"
+        },
+        {
+          "item_ids": [
+            "item-d90b5e0ca744e4b8"
+          ],
+          "lens": "structure"
+        }
+      ],
+      "lenses": [
+        "delivery",
+        "structure"
+      ],
+      "retired": [],
+      "revision": 1,
+      "source_refs": [
+        "asset://repo",
+        "run://ledger",
+        "accept://result",
+        "terminal://control",
+        "evidence://op-finding",
+        "basis://op-unknown",
+        "evidence://patch-finding",
+        "basis://patch-unknown"
+      ],
+      "subject": "isolated repository"
+    },
+    "closure": {
+      "acceptance_results": [
+        {
+          "actual_refs": [
+            "actual://result"
+          ],
+          "comparison_refs": [
+            "comparison://validator"
+          ],
+          "evidence_refs": [
+            "accept://result"
+          ],
+          "id": "point-7b3ea31ba18d4b3a",
+          "judge_ref": "tool://fixture",
+          "result": "pass",
+          "unknowns": []
+        }
+      ],
+      "attempt_result": "pass",
+      "findings": [
+        {
+          "evidence_refs": [
+            "evidence://op-finding"
+          ],
+          "origin": "operation",
+          "origin_ref": "op-c45f6fb0ea43467b",
+          "statement": "branch failure remains relevant"
+        },
+        {
+          "evidence_refs": [
+            "evidence://patch-finding"
+          ],
+          "origin": "emergency-patch",
+          "origin_ref": "op-c45f6fb0ea43467b",
+          "statement": "the Plan omitted a required adapter"
+        }
+      ],
+      "incomplete_deliverable": null,
+      "operation_summary": {
+        "actual": 4,
+        "emergency_patches": 1,
+        "failed": 1,
+        "findings": 2,
+        "not_run": 0,
+        "passed": 3,
+        "planned": 4,
+        "unknowns": 2
+      },
+      "result_disposition": {
+        "refs": [
+          "actual://result"
+        ],
+        "state": "placed",
+        "statement": "result remains in fixture"
+      },
+      "run_halt": {
+        "resume_ref": null,
+        "trigger": "plan-complete"
+      },
+      "run_head_event_sha256": "c7918dbc87ba11116b83191a2596a75c5f7851c5eff9265127bda4502b550827",
+      "run_log_ref": "k4-run-projection/v5@jsonl#sha256=ef6634b69cb3125f742bfb4db0f7bf2f6782c23c65b83b4962cc3d605203cf85",
+      "terminal_control_results": [
+        {
+          "actual_refs": [
+            "actual://budget"
+          ],
+          "comparison_refs": [
+            "comparison://budget"
+          ],
+          "evidence_refs": [
+            "terminal://control"
+          ],
+          "id": "control-3d1457eaa9c157e2",
+          "judge_ref": "tool://fixture",
+          "result": "pass",
+          "unknowns": []
+        }
+      ],
+      "unknowns": [
+        {
+          "basis_refs": [
+            "basis://op-unknown"
+          ],
+          "origin": "operation",
+          "origin_ref": "op-c45f6fb0ea43467b",
+          "statement": "branch cause remains unknown"
+        },
+        {
+          "basis_refs": [
+            "basis://patch-unknown"
+          ],
+          "origin": "emergency-patch",
+          "origin_ref": "op-c45f6fb0ea43467b",
+          "statement": "adapter portability is unknown"
+        }
+      ]
+    }
+  },
+  "generated_unix_ms": 1789048080562,
+  "schema": "k4-finish-document/v3"
+}

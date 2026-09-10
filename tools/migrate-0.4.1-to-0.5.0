@@ -132,11 +132,16 @@ def require_absent_outputs(directory: Path, names: list[str]) -> None:
 
 
 def invoke_materialize(root: Path, skill: str, semantic: Path, output: Path, binds: list[tuple[str, Path]], run_log: Path | None = None) -> None:
-    words = [str(root / "skills" / skill / "scripts" / "materialize"), "--input", str(semantic), "--output", str(output)]
-    if run_log is not None:
-        words.extend(["--run-log", str(run_log)])
+    contract = root / "tools" / "contracts" / "0.5.0" / f"{skill}.cue"
+    words = [str(root / "tools" / "stable-result"), "--contract", str(contract), "materialize", "--input", str(semantic), "--output", str(output)]
     for name, path in binds:
         words.extend(["--bind", f"{name}={path}"])
+    if run_log is not None:
+        words.extend([
+            "--project-log-bind", f"run={run_log}",
+            "--projection-contract", str(root / "tools" / "contracts" / "0.5.0" / "k4-run.cue"),
+            "--projection-bind", "goal", "--projection-bind", "plan",
+        ])
     run(words, f"materialize {skill}")
 
 
@@ -270,7 +275,8 @@ def migrate(args: argparse.Namespace) -> dict[str, Any]:
                     event["next_operation_id"] = operation_map[event["next_operation_id"]] if event["next_operation_id"] is not None else None
                 semantic = write_semantic(temporary, f"run-event-{index}.json", event)
                 run([
-                    str(root / "skills/k4-run/scripts/append"), "--input", str(semantic), "--log", str(new_run_path),
+                    str(root / "tools/stable-result"), "--contract", str(root / "tools/contracts/0.5.0/k4-run.cue"),
+                    "append", "--input", str(semantic), "--log", str(new_run_path),
                     "--bind", f"goal={new_goal_path}", "--bind", f"plan={new_plan_path}",
                 ], f"migrate Run event {index}")
 

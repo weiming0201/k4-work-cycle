@@ -1,4 +1,49 @@
-# 0.4.1 to 0.5.0 migration
+# Versioned migration
+
+Migration Tools target one exact released contract. The frozen target CUE for
+`0.5.0` is retained under `tools/contracts/0.5.0/`, so the older migration does
+not silently begin producing a newer schema.
+
+## 0.5.0 to 0.6.0
+
+Release `0.6.0` adds a Plan-owned abort response and replaces the three legacy
+halt triggers with `plan-complete | abort`. A legacy Plan cannot supply its own
+abort response, so migration requires an explicit preserve-only policy:
+
+```json
+{
+  "on_abort": {
+    "mode": "preserve-only",
+    "reason": "Why this legacy Plan should preserve evidence only on abort."
+  },
+  "legacy_abort_source_ref": null
+}
+```
+
+Set `legacy_abort_source_ref` to a nonempty external or runtime evidence source
+only when migrating a Run whose old halt is `blocked` or `cancelled`. The Tool
+then inserts an `abort-confirmed` event before the new abort terminal event. A
+normal `plan-complete` chain requires no such source.
+
+Run:
+
+```text
+tools/migrate-0.5.0-to-0.6.0 \
+  --observe observe.json \
+  --goal goal.json \
+  --plan plan.json \
+  [--run-log run.jsonl] \
+  [--finish finish.json] \
+  --policy policy.json \
+  --output-dir absent-directory
+```
+
+Goal remains byte-identical. Plan is re-materialized with all legacy
+operations in the normal phase and the declared preserve-only response. Run is
+replayed with new identities and hash chain; Finish is re-materialized from
+that exact ledger.
+
+## 0.4.1 to 0.5.0
 
 Release `0.5.0` adds semantic information that cannot be inferred from a
 `0.4.1` chain: the complete Goal execution envelope, each judge's sourceable

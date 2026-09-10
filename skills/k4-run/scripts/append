@@ -29,17 +29,18 @@ if [ "${1:-}" = "--help" ]; then
         '    reason, script_ref, tool_refs, permission_refs, read_refs, write_refs,' \
         '    resource_refs, maximum_side_effects, actual_side_effect_refs, trace_refs,' \
         '    findings, unknowns, verification_scope: mainline-resumption-only}' \
-        '  halt: {kind, after_operation_id, next_operation_id, trigger,' \
+        '  abort-confirmed: {kind, after_operation_id, source_ref, reason, evidence_refs}' \
+        '  halt: {kind, after_operation_id, trigger,' \
         '    budget_evidence_refs, side_effect_evidence_refs, evidence_refs,' \
         '    resume_ref}' \
         '  result: pass | fail' \
         '  application_result: applied | not-applied' \
-        '  trigger: plan-complete | blocked | cancelled' \
+        '  trigger: plan-complete | abort' \
         '  emergency-patch tools, permissions, positions, resources, and effects' \
         '    must remain inside the frozen Goal execution envelope' \
         '' \
         'Output:' \
-        '  One generated operation-result, emergency-patch, or halt event is appended.' \
+        '  One generated operation-result, emergency-patch, abort-confirmed, or halt event is appended.' \
         '' \
         'Exit status: 0 after one append; 1 without append on invalid input.'
     exit 0

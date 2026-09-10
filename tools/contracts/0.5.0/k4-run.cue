@@ -24,7 +24,6 @@ context: _
 }
 #PlanOperation: {
 	operation_id: #OperationID
-	phase:        "normal" | "abort"
 	depends_on: [...#OperationID]
 	controlled_by: [...#ControlID]
 	on_result: close({
@@ -59,18 +58,13 @@ context: _
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v7"
+	schema:            "k4-plan-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding}
 	document: {
 		status: "executable"
 		entry_operation_ids: [#OperationID, ...#OperationID]
-		on_abort: close({
-			mode:               "preserve-only" | "route"
-			entry_operation_id: null | #OperationID
-			reason:             #Text
-		})
 		operations: [#PlanOperation, ...#PlanOperation]
 		coverage: {
 			controls: [...#CoverageEntry]
@@ -128,25 +122,19 @@ context: _
 	unknowns: [...#Unknown]
 	verification_scope: "mainline-resumption-only"
 })
-#AbortConfirmedEvent: close({
-	kind:               "abort-confirmed"
-	after_operation_id: null | #OperationID
-	source_ref:         #Text
-	reason:             #Text
-	evidence_refs:      #NonEmptyStrings
-})
 #HaltEvent: close({
 	kind:                      "halt"
 	after_operation_id:        null | #OperationID
-	trigger:                   "plan-complete" | "abort"
+	next_operation_id:         null | #OperationID
+	trigger:                   "plan-complete" | "blocked" | "cancelled"
 	budget_evidence_refs:      #Strings
 	side_effect_evidence_refs: #Strings
 	evidence_refs:             #NonEmptyStrings
 	resume_ref:                null | #Text
 })
-#Event: #OperationEvent | #PatchEvent | #AbortConfirmedEvent | #HaltEvent
+#Event: #OperationEvent | #PatchEvent | #HaltEvent
 #EventEnvelope: close({
-	schema:                "k4-run-event/v6"
+	schema:                "k4-run-event/v5"
 	sequence:              uint
 	recorded_unix_ms:      uint
 	previous_event_sha256: null | #Digest
@@ -162,8 +150,6 @@ _planGoalBinding: _plan.value.bindings.goal
 _planGoalBinding: _goal.binding
 _bindings: close({goal: _goal.binding, plan: _plan.binding})
 _operationIDs: [for operation in _plan.value.document.operations {operation.operation_id}]
-_normalOperationIDs: [for operation in _plan.value.document.operations if operation.phase == "normal" {operation.operation_id}]
-_abortOperationIDs: [for operation in _plan.value.document.operations if operation.phase == "abort" {operation.operation_id}]
 _controlTiming: {for control in _goal.value.document.control_contracts {
 	(control.control_id): control.check_timing
 }}
@@ -209,7 +195,6 @@ _operationEventIDsUnique: list.UniqueItems(_operationEventIDs) & true
 _patchEvents: [for envelope in _events if envelope.event.kind == "emergency-patch" {envelope}]
 _patchOperationIDs: [for envelope in _patchEvents {envelope.event.operation_id}]
 _patchOperationIDsUnique: list.UniqueItems(_patchOperationIDs) & true
-_abortConfirmedEvents: [for envelope in _events if envelope.event.kind == "abort-confirmed" {envelope}]
 _haltEvents: [for envelope in _events if envelope.event.kind == "halt" {envelope}]
 
 _operationByID: {for operation in _plan.value.document.operations {(operation.operation_id): operation}}
@@ -226,17 +211,9 @@ _failRoutes: [for envelope in _operationEvents if envelope.event.result == "fail
 })
 }]
 _routedResponses: list.Concat([_passRoutes, _failRoutes])
-_normalSelectedSuccessors: list.Concat([for route in _routedResponses if _operationByID[route.operation_id].phase == "normal" {route.next_operation_ids}])
-_abortSelectedSuccessors: list.Concat([for route in _routedResponses if _operationByID[route.operation_id].phase == "abort" {route.next_operation_ids}])
-_activatedNormalOperationIDs: list.Concat([_plan.value.document.entry_operation_ids, _normalSelectedSuccessors])
-_abortEntryOperationIDs: *[] | [...]
-if len(_abortConfirmedEvents) == 1 && _plan.value.document.on_abort.entry_operation_id != null {
-	_abortEntryOperationIDs: [_plan.value.document.on_abort.entry_operation_id]
-}
-_activatedAbortOperationIDs: list.Concat([_abortEntryOperationIDs, _abortSelectedSuccessors])
-_activatedOperationIDs: list.Concat([_activatedNormalOperationIDs, _activatedAbortOperationIDs])
-_pendingNormalOperationIDs: [for operation in _plan.value.document.operations if operation.phase == "normal" if list.Contains(_activatedNormalOperationIDs, operation.operation_id) if !list.Contains(_operationEventIDs, operation.operation_id) {operation.operation_id}]
-_pendingAbortOperationIDs: [for operation in _plan.value.document.operations if operation.phase == "abort" if list.Contains(_activatedAbortOperationIDs, operation.operation_id) if !list.Contains(_operationEventIDs, operation.operation_id) {operation.operation_id}]
+_selectedSuccessors: list.Concat([for route in _routedResponses {route.next_operation_ids}])
+_activatedOperationIDs: list.Concat([_plan.value.document.entry_operation_ids, _selectedSuccessors])
+_pendingOperationIDs: [for operation in _plan.value.document.operations if list.Contains(_activatedOperationIDs, operation.operation_id) if !list.Contains(_operationEventIDs, operation.operation_id) {operation.operation_id}]
 
 _publicLedgerChecks: {
 	for envelope in _events {
@@ -244,21 +221,13 @@ _publicLedgerChecks: {
 	}
 	_operationIDsUnique: list.UniqueItems(_operationEventIDs) & true
 	_patchIDsUnique:     list.UniqueItems(_patchOperationIDs) & true
-	if len(_abortConfirmedEvents) > 1 {_invalid: error("Run ledger may contain only one abort-confirmed event")}
 	if len(_haltEvents) > 1 {_invalid: error("Run ledger may contain only one halt event")}
 	if len(_haltEvents) == 1 {
 		if _haltEvents[0].sequence != len(_events)-1 {_invalid: error("Run ledger cannot contain an event after halt")}
 	}
 	for envelope in _operationEvents {
 		if !list.Contains(_operationIDs, envelope.event.operation_id) {_invalid: error("Run ledger contains an unknown Plan operation")}
-		if list.Contains(_operationIDs, envelope.event.operation_id) && _operationByID[envelope.event.operation_id].phase == "normal" {
-			if len([for abortEvent in _abortConfirmedEvents if abortEvent.sequence < envelope.sequence {abortEvent}]) != 0 {_invalid: error("normal operation cannot execute after abort confirmation")}
-			if !list.Contains(_plan.value.document.entry_operation_ids, envelope.event.operation_id) && len([for route in _routedResponses if route.sequence < envelope.sequence if _operationByID[route.operation_id].phase == "normal" if list.Contains(route.next_operation_ids, envelope.event.operation_id) {route}]) == 0 {_invalid: error("normal operation was not activated by the frozen Plan route")}
-		}
-		if list.Contains(_operationIDs, envelope.event.operation_id) && _operationByID[envelope.event.operation_id].phase == "abort" {
-			if len([for abortEvent in _abortConfirmedEvents if abortEvent.sequence < envelope.sequence {abortEvent}]) != 1 {_invalid: error("abort response operation requires a prior abort-confirmed event")}
-			if _plan.value.document.on_abort.entry_operation_id != envelope.event.operation_id && len([for route in _routedResponses if route.sequence < envelope.sequence if _operationByID[route.operation_id].phase == "abort" if list.Contains(route.next_operation_ids, envelope.event.operation_id) {route}]) == 0 {_invalid: error("abort response operation was not activated by the frozen on_abort route")}
-		}
+		if !list.Contains(_plan.value.document.entry_operation_ids, envelope.event.operation_id) && len([for route in _routedResponses if route.sequence < envelope.sequence if list.Contains(route.next_operation_ids, envelope.event.operation_id) {route}]) == 0 {_invalid: error("Run operation was not activated by the frozen Plan route")}
 		if envelope.event.result == "pass" && len(envelope.event.actual_output_refs) == 0 {_invalid: error("passing Run operation requires actual output")}
 		if len(envelope.event.evidence_refs) == 0 {_invalid: error("Run operation result requires evidence")}
 		if list.Contains(_operationIDs, envelope.event.operation_id) {
@@ -276,8 +245,6 @@ _publicLedgerChecks: {
 	}
 	for envelope in _patchEvents {
 		if !list.Contains(_operationIDs, envelope.event.operation_id) {_invalid: error("emergency patch must identify one Plan operation")}
-		if list.Contains(_operationIDs, envelope.event.operation_id) && _operationByID[envelope.event.operation_id].phase != "normal" {_invalid: error("emergency patch is unavailable inside the frozen abort response")}
-		if len([for abortEvent in _abortConfirmedEvents if abortEvent.sequence < envelope.sequence {abortEvent}]) != 0 {_invalid: error("emergency patch cannot execute after abort confirmation")}
 		if len([for prior in _operationEvents if prior.sequence < envelope.sequence if prior.event.operation_id == envelope.event.operation_id {prior}]) != 0 {_invalid: error("emergency patch must precede the Plan operation response")}
 		if !list.Contains(_plan.value.document.entry_operation_ids, envelope.event.operation_id) && len([for route in _routedResponses if route.sequence < envelope.sequence if list.Contains(route.next_operation_ids, envelope.event.operation_id) {route}]) == 0 {_invalid: error("emergency patch may only restore an activated Plan operation")}
 		if list.Contains(_operationIDs, envelope.event.operation_id) {
@@ -292,25 +259,11 @@ _publicLedgerChecks: {
 		for ref in envelope.event.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("emergency-patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
 		for effect in envelope.event.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("emergency-patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	}
-	for envelope in _abortConfirmedEvents {
-		_priorOperationEvents: [for prior in _operationEvents if prior.sequence < envelope.sequence {prior}]
-		if len(_priorOperationEvents) == 0 && envelope.event.after_operation_id != null {_invalid: error("abort-confirmed position must follow the last normal operation response")}
-		if len(_priorOperationEvents) > 0 && envelope.event.after_operation_id != _priorOperationEvents[len(_priorOperationEvents)-1].event.operation_id {_invalid: error("abort-confirmed position must follow the last normal operation response")}
-		if len([for operationEvent in _operationEvents if operationEvent.sequence < envelope.sequence if list.Contains(_abortOperationIDs, operationEvent.event.operation_id) {operationEvent}]) != 0 {_invalid: error("abort response cannot execute before abort confirmation")}
-		if len(_pendingNormalOperationIDs) == 0 {_invalid: error("abort cannot be confirmed after the normal Plan route already reached end")}
-	}
 	if len(_haltEvents) == 1 {
 		if len(_operationEvents) == 0 && _haltEvents[0].event.after_operation_id != null {_invalid: error("halt position must follow the last Run operation response")}
 		if len(_operationEvents) > 0 && _haltEvents[0].event.after_operation_id != _operationEvents[len(_operationEvents)-1].event.operation_id {_invalid: error("halt position must follow the last Run operation response")}
-		if _haltEvents[0].event.trigger == "plan-complete" {
-			if len(_abortConfirmedEvents) != 0 {_invalid: error("plan-complete cannot follow abort confirmation")}
-			if len(_pendingNormalOperationIDs) != 0 {_invalid: error("plan-complete requires every activated normal operation to have a response")}
-		}
-		if _haltEvents[0].event.trigger == "abort" {
-			if len(_abortConfirmedEvents) != 1 {_invalid: error("abort termination requires exactly one abort-confirmed event")}
-			if len(_pendingAbortOperationIDs) != 0 {_invalid: error("abort termination requires every activated abort response operation to have a response")}
-			if len(_haltEvents[0].event.side_effect_evidence_refs) == 0 {_invalid: error("abort termination requires residual side-effect evidence")}
-		}
+		if _haltEvents[0].event.next_operation_id != null && !list.Contains(_operationIDs, _haltEvents[0].event.next_operation_id) {_invalid: error("halt next_operation_id must identify a Plan operation")}
+		if _haltEvents[0].event.trigger == "plan-complete" && len(_pendingOperationIDs) != 0 {_invalid: error("plan-complete requires every activated Plan operation to have a response")}
 	}
 }
 
@@ -319,14 +272,7 @@ _publicCandidateChecks: {
 	if _input.kind == "operation-result" {
 		if !list.Contains(_operationIDs, _input.operation_id) {_invalid: error("operation_id must identify exactly one Plan operation")}
 		if list.Contains(_operationEventIDs, _input.operation_id) {_invalid: error("operation_id already has a Run response")}
-		if list.Contains(_normalOperationIDs, _input.operation_id) {
-			if len(_abortConfirmedEvents) != 0 {_invalid: error("normal operation cannot execute after abort confirmation")}
-			if !list.Contains(_activatedNormalOperationIDs, _input.operation_id) {_invalid: error("normal operation is not activated by the frozen Plan route")}
-		}
-		if list.Contains(_abortOperationIDs, _input.operation_id) {
-			if len(_abortConfirmedEvents) != 1 {_invalid: error("abort response operation requires one prior abort-confirmed event")}
-			if !list.Contains(_activatedAbortOperationIDs, _input.operation_id) {_invalid: error("abort response operation is not activated by the frozen on_abort route")}
-		}
+		if !list.Contains(_activatedOperationIDs, _input.operation_id) {_invalid: error("operation_id is not activated by the frozen Plan route")}
 		if _input.result == "pass" && len(_input.actual_output_refs) == 0 {_invalid: error("passing Run operation requires actual output")}
 		if len(_input.evidence_refs) == 0 {_invalid: error("Run operation result requires evidence")}
 		if list.Contains(_operationIDs, _input.operation_id) {
@@ -344,8 +290,6 @@ _publicCandidateChecks: {
 	}
 	if _input.kind == "emergency-patch" {
 		if !list.Contains(_operationIDs, _input.operation_id) {_invalid: error("emergency patch must identify exactly one Plan operation")}
-		if list.Contains(_abortOperationIDs, _input.operation_id) {_invalid: error("emergency patch is unavailable inside the frozen abort response")}
-		if len(_abortConfirmedEvents) != 0 {_invalid: error("emergency patch cannot execute after abort confirmation")}
 		if list.Contains(_patchOperationIDs, _input.operation_id) {_invalid: error("a Plan operation may receive at most one emergency patch")}
 		if list.Contains(_operationEventIDs, _input.operation_id) {_invalid: error("emergency patch must precede the Plan operation response")}
 		if !list.Contains(_activatedOperationIDs, _input.operation_id) {_invalid: error("emergency patch may only restore an activated Plan operation")}
@@ -361,24 +305,11 @@ _publicCandidateChecks: {
 		for ref in _input.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("emergency-patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
 		for effect in _input.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("emergency-patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	}
-	if _input.kind == "abort-confirmed" {
-		if len(_abortConfirmedEvents) != 0 {_invalid: error("Run may confirm abort only once")}
-		if len(_operationEvents) == 0 && _input.after_operation_id != null {_invalid: error("abort-confirmed position must follow the last normal operation response")}
-		if len(_operationEvents) > 0 && _input.after_operation_id != _operationEvents[len(_operationEvents)-1].event.operation_id {_invalid: error("abort-confirmed position must follow the last normal operation response")}
-		if len(_pendingNormalOperationIDs) == 0 {_invalid: error("abort cannot be confirmed after the normal Plan route already reached end")}
-	}
 	if _input.kind == "halt" {
 		if len(_operationEvents) == 0 && _input.after_operation_id != null {_invalid: error("halt position must follow the last Run operation response")}
 		if len(_operationEvents) > 0 && _input.after_operation_id != _operationEvents[len(_operationEvents)-1].event.operation_id {_invalid: error("halt position must follow the last Run operation response")}
-		if _input.trigger == "plan-complete" {
-			if len(_abortConfirmedEvents) != 0 {_invalid: error("plan-complete cannot follow abort confirmation")}
-			if len(_pendingNormalOperationIDs) != 0 {_invalid: error("plan-complete requires every activated normal operation to have a response")}
-		}
-		if _input.trigger == "abort" {
-			if len(_abortConfirmedEvents) != 1 {_invalid: error("abort termination requires exactly one abort-confirmed event")}
-			if len(_pendingAbortOperationIDs) != 0 {_invalid: error("abort termination requires every activated abort response operation to have a response")}
-			if len(_input.side_effect_evidence_refs) == 0 {_invalid: error("abort termination requires residual side-effect evidence")}
-		}
+		if _input.next_operation_id != null && !list.Contains(_operationIDs, _input.next_operation_id) {_invalid: error("halt next_operation_id must identify a Plan operation")}
+		if _input.trigger == "plan-complete" && len(_pendingOperationIDs) != 0 {_invalid: error("plan-complete requires every activated Plan operation to have a response")}
 	}
 }
 
@@ -419,19 +350,11 @@ if _input.kind == "emergency-patch" {
 		verification_scope:      _input.verification_scope
 	})
 }
-if _input.kind == "abort-confirmed" {
-	_generatedEvent: close({
-		kind:               _input.kind
-		after_operation_id: _input.after_operation_id
-		source_ref:         _input.source_ref
-		reason:             _input.reason
-		evidence_refs:      _input.evidence_refs
-	})
-}
 if _input.kind == "halt" {
 	_generatedEvent: close({
 		kind:                      _input.kind
 		after_operation_id:        _input.after_operation_id
+		next_operation_id:         _input.next_operation_id
 		trigger:                   _input.trigger
 		budget_evidence_refs:      _input.budget_evidence_refs
 		side_effect_evidence_refs: _input.side_effect_evidence_refs
@@ -441,14 +364,13 @@ if _input.kind == "halt" {
 }
 
 next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
-	schema:   "k4-run-event/v6"
+	schema:   "k4-run-event/v5"
 	bindings: _bindings
 	event:    _generatedEvent
 })
 
 #ProjectedOperation: close({
 	operation_id:       #OperationID
-	phase:              "normal" | "abort"
 	result:             #ProjectedResult
 	event_sequence:     null | uint
 	eligibility_refs:   #Strings
@@ -457,13 +379,6 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 	trace_refs:         #Strings
 	findings: [...#Finding]
 	unknowns: [...#Unknown]
-})
-#ProjectedAbortConfirmation: close({
-	event_sequence:     uint
-	after_operation_id: null | #OperationID
-	source_ref:         #Text
-	reason:             #Text
-	evidence_refs:      #NonEmptyStrings
 })
 #ControlObservation: close({
 	event_sequence:  uint
@@ -502,7 +417,6 @@ _operationProjection: [for operation in _plan.value.document.operations {
 	if len(_matches) == 0 {
 		close({
 			operation_id:   operation.operation_id
-			phase:          operation.phase
 			result:         "not-run"
 			event_sequence: null
 			eligibility_refs: []
@@ -516,7 +430,6 @@ _operationProjection: [for operation in _plan.value.document.operations {
 	if len(_matches) == 1 {
 		close({
 			operation_id:       operation.operation_id
-			phase:              operation.phase
 			result:             _matches[0].event.result
 			event_sequence:     _matches[0].sequence
 			eligibility_refs:   _matches[0].event.eligibility_refs
@@ -578,21 +491,9 @@ _operationFailures: [for state in _operationStates if state == "fail" {state}]
 _executionResult: null | "pass" | "fail"
 if len(_haltEvents) == 0 {_executionResult: null}
 if len(_haltEvents) == 1 {
-	if _haltEvents[0].event.trigger == "abort" {_executionResult: "fail"}
+	if _haltEvents[0].event.trigger != "plan-complete" {_executionResult: null}
 	if _haltEvents[0].event.trigger == "plan-complete" && len(_operationFailures) == 0 {_executionResult: "pass"}
 	if _haltEvents[0].event.trigger == "plan-complete" && len(_operationFailures) > 0 {_executionResult: "fail"}
-}
-
-_abortConfirmation: null | #ProjectedAbortConfirmation
-if len(_abortConfirmedEvents) == 0 {_abortConfirmation: null}
-if len(_abortConfirmedEvents) == 1 {
-	_abortConfirmation: close({
-		event_sequence:     _abortConfirmedEvents[0].sequence
-		after_operation_id: _abortConfirmedEvents[0].event.after_operation_id
-		source_ref:         _abortConfirmedEvents[0].event.source_ref
-		reason:             _abortConfirmedEvents[0].event.reason
-		evidence_refs:      _abortConfirmedEvents[0].event.evidence_refs
-	})
 }
 
 _halted: len(_haltEvents) == 1
@@ -602,6 +503,7 @@ if _halted {
 	_halt: close({
 		event_sequence:            _haltEvents[0].sequence
 		after_operation_id:        _haltEvents[0].event.after_operation_id
+		next_operation_id:         _haltEvents[0].event.next_operation_id
 		trigger:                   _haltEvents[0].event.trigger
 		budget_evidence_refs:      _haltEvents[0].event.budget_evidence_refs
 		side_effect_evidence_refs: _haltEvents[0].event.side_effect_evidence_refs
@@ -621,13 +523,12 @@ if len(_events) > 0 {
 }
 
 project: _planChecks & _publicLedgerChecks & close({
-	schema:   "k4-run-projection/v6"
+	schema:   "k4-run-projection/v5"
 	bindings: _bindings
 	document: close({
 		operations:                _operationProjection
 		operation_results:         _actualOperationResults
 		emergency_patches:         _patchProjection
-		abort_confirmation:        _abortConfirmation
 		invariant_control_results: _invariantResults
 		execution_result:          _executionResult
 		halted:                    _halted
@@ -639,7 +540,7 @@ project: _planChecks & _publicLedgerChecks & close({
 })
 
 _existingProjection: context.existing & {
-	schema:            "k4-run-projection/v6"
+	schema:            "k4-run-projection/v5"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings:          _bindings

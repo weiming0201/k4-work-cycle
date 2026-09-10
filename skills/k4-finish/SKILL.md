@@ -20,7 +20,8 @@ ledger that Observe opened.
   recording the exact judge identity frozen by Goal. A completed Plan route
   does not by itself prove that the Goal passed.
 - Aggregate actual and not-run operations, pass/fail results, Findings,
-  unknowns, emergency patches, halt, result disposition, and incomplete work.
+  unknowns, emergency patches, halt, the actual Plan-owned abort response,
+  residual-effect evidence, result disposition, and incomplete work.
 - Do not repair, replan, append Run events, adopt or publish a result, or expose
   the next Goal. The next Observe decides how the settled Account changes the
   opportunity inventory.

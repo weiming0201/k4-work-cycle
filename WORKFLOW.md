@@ -80,6 +80,7 @@ rationale.
 
 Each real operation declares:
 
+- its `normal` or `abort` phase;
 - the Goal points and controls it serves;
 - its tool, responsible executor, readable and writable positions;
 - permissions, resources, and maximum side effects;
@@ -92,6 +93,12 @@ predecessor operations, and each such predecessor routes both outcomes to that
 join. Every dependency and result edge points forward in topological order, so
 the materialized graph is acyclic. Start, fork, join, and end are structural
 positions, not additional operation results.
+
+The Plan also freezes one global `on_abort` response. `preserve-only` closes
+the attempt after preserving the abort evidence. `route` names one entry into a
+separate finite abort-phase subgraph. Normal and abort edges never cross;
+abort-phase operations do not satisfy Goal acceptance points. This is not a
+third operation result and Run cannot select or revise it.
 
 Plan turns the Goal's flat constraints into task-specific scheduling authority.
 Every operation's tool, permissions, read/write positions, resources, and
@@ -118,15 +125,19 @@ reason, script, tools, exact positions, maximum and actual effects, trace,
 application result, Findings, and unknowns. Its tools, permissions, positions,
 resources, and maximum effects remain inside the Goal envelope. It is checked
 only far enough to resume the original operation; it receives no separate
-systematic test. The original operation is then retried and still produces
-`pass` or `fail`.
+systematic test. Emergency patching applies only to normal operations. The
+original operation is then retried and still produces `pass` or `fail`.
 
 Run halts as:
 
 - `plan-complete` when every activated route has reached an end;
-- `blocked` when the frozen route cannot continue within authority after the
-  permitted patch;
-- `cancelled` when the attempt is externally cancelled.
+- `abort` only after an explicit external cancellation or recoverable runtime
+  fact is recorded and the Plan's frozen abort response has completed.
+
+An incomplete ledger is open, not an implicit terminal state. A failed normal
+operation follows its frozen fail edge and does not itself cause abort. Run does
+not decide how abort is handled, and completing an abort response does not turn
+the attempt into `plan-complete`.
 
 Every event is appended once and never rewritten. The Run projection is
 reconstructible current state, not another history. Run does not replan, judge
@@ -151,7 +162,9 @@ Every Goal acceptance point and terminal control receives a binary judgment
 from the exact judge identity frozen by Goal. Unknowns remain attached
 annotations. An attempt passes only when Run reaches
 `plan-complete` and all acceptance, terminal-control, and invariant-control
-judgments pass. A failed operation may therefore be recovered by its frozen
+judgments pass. `abort` always settles the attempt as failed and retains the
+abort source, evidence, frozen response mode, response-operation counts, and
+residual effect references. A failed operation may therefore be recovered by its frozen
 fail route; operation failure alone does not decide the Goal.
 
 Finish does not modify Goal or Plan, append Run events, repair, adopt, publish,

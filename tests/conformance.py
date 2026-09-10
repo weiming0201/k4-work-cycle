@@ -52,7 +52,7 @@ def manifest_input(root: Path) -> dict[str, Any]:
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.5.0",
+        "extension_version": "0.6.0",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",
@@ -353,6 +353,7 @@ class Harness:
 
         def operation(key: str, deps: list[int], targets_pass: list[int], targets_fail: list[int], satisfies: list[str]) -> dict[str, Any]:
             return {
+                "phase": "normal",
                 "operation_key": key,
                 "depends_on_indices": deps,
                 "satisfies": satisfies,
@@ -381,6 +382,11 @@ class Harness:
             "selection_rationale": "the fork-join route exercises independent work while preserving one bounded settlement",
             "route": {"claim": "fork two checks and join their responses", "supporting_refs": ["asset://repo"], "counter_refs": []},
             "entry_operation_indices": [0],
+            "on_abort": {
+                "mode": "preserve-only",
+                "entry_operation_index": None,
+                "reason": "preserve the sourced abort state without inventing recovery work",
+            },
             "operations": [
                 operation("prepare", [], [1, 2], [], []),
                 operation("branch-a", [], [3], [3], []),
@@ -544,7 +550,6 @@ class Harness:
             {
                 "kind": "halt",
                 "after_operation_id": operations[3],
-                "next_operation_id": None,
                 "trigger": "plan-complete",
                 "budget_evidence_refs": ["evidence://budget"],
                 "side_effect_evidence_refs": ["evidence://effects"],
@@ -692,6 +697,11 @@ class Harness:
             "selection_rationale": "one operation is sufficient for the zero-control boundary case",
             "route": {"claim": "execute the one bounded operation", "supporting_refs": ["asset://repo"], "counter_refs": []},
             "entry_operation_indices": [0],
+            "on_abort": {
+                "mode": "preserve-only",
+                "entry_operation_index": None,
+                "reason": "preserve the sourced abort state without inventing recovery work",
+            },
             "operations": [zero_operation],
             "blockers": [],
             "unknowns": [],
@@ -723,7 +733,6 @@ class Harness:
             {
                 "kind": "halt",
                 "after_operation_id": zero_operation_id,
-                "next_operation_id": None,
                 "trigger": "plan-complete",
                 "budget_evidence_refs": [],
                 "side_effect_evidence_refs": [],
@@ -752,6 +761,219 @@ class Harness:
             raise AssertionError("zero-element Finish projection is not truthful")
         self.passed += 1
         print("PASS zero-control and zero-patch collections remain legal")
+
+        # Abort is a sourced terminal state whose response is frozen by Plan.
+        abort_plan_input = json.loads(json.dumps(plan_input))
+        abort_operation = operation("abort-preserve", [], [], [], [])
+        abort_operation["phase"] = "abort"
+        abort_operation["controlled_by"] = []
+        abort_operation["write_refs"] = ["artifact://adapter"]
+        abort_plan_input["operations"].append(abort_operation)
+        abort_plan_input["on_abort"] = {
+            "mode": "route",
+            "entry_operation_index": 4,
+            "reason": "preserve the bounded runtime state through one declared response operation",
+        }
+        abort_plan = self.work / "abort-route-plan.json"
+        self.materialize("Plan with abort route", "k4-plan", abort_plan_input, abort_plan, [("goal", goal)])
+        abort_plan_doc = read_json(abort_plan)["document"]
+        abort_operations = [item["operation_id"] for item in abort_plan_doc["operations"]]
+        if abort_plan_doc["on_abort"]["entry_operation_id"] != abort_operations[4]:
+            raise AssertionError("Plan did not freeze the declared abort route")
+        self.passed += 1
+        print("PASS Plan freezes abort response")
+
+        cross_phase_input = json.loads(json.dumps(abort_plan_input))
+        cross_phase_input["operations"][0]["on_result"]["pass"]["next_operation_indices"].append(4)
+        cross_phase_source = self.work / "plan-cross-phase-input.json"
+        write_json(cross_phase_source, cross_phase_input)
+        self.refuse(
+            "Plan rejects cross-phase edge",
+            self.command("k4-plan", "materialize"),
+            "--input", str(cross_phase_source),
+            "--output", str(self.work / "never-cross-phase-plan.json"),
+            "--bind", f"goal={goal}",
+        )
+        abort_acceptance_input = json.loads(json.dumps(abort_plan_input))
+        abort_acceptance_input["operations"][4]["satisfies"] = [point_id]
+        abort_acceptance_source = self.work / "abort-acceptance-input.json"
+        write_json(abort_acceptance_source, abort_acceptance_input)
+        self.refuse(
+            "Plan rejects abort acceptance claim",
+            self.command("k4-plan", "materialize"),
+            "--input", str(abort_acceptance_source),
+            "--output", str(self.work / "never-abort-acceptance-plan.json"),
+            "--bind", f"goal={goal}",
+        )
+
+        def abort_result() -> dict[str, Any]:
+            return {
+                "kind": "operation-result",
+                "operation_id": abort_operations[4],
+                "result": "pass",
+                "eligibility_refs": ["eligibility://abort-route"],
+                "actual_output_refs": ["actual://abort-state"],
+                "evidence_refs": ["evidence://abort-operation"],
+                "trace_refs": ["trace://abort-operation"],
+                "invariant_checks": [],
+                "findings": [],
+                "unknowns": [],
+            }
+
+        abort_log = self.work / "abort-run.jsonl"
+        abort_prepare = result_event(0, "pass")
+        abort_prepare["operation_id"] = abort_operations[0]
+        self.append("Abort Run prepare", abort_prepare, abort_log, goal, abort_plan)
+        unconfirmed_abort_source = self.work / "unconfirmed-abort-operation.json"
+        write_json(unconfirmed_abort_source, abort_result())
+        self.refuse(
+            "Run rejects unconfirmed abort response",
+            self.command("k4-run", "append"),
+            "--input", str(unconfirmed_abort_source),
+            "--log", str(abort_log),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={abort_plan}",
+        )
+        abort_patch = json.loads(json.dumps(patch_event))
+        abort_patch["operation_id"] = abort_operations[4]
+        abort_patch_source = self.work / "abort-route-patch.json"
+        write_json(abort_patch_source, abort_patch)
+        self.refuse(
+            "Run rejects patch in abort response",
+            self.command("k4-run", "append"),
+            "--input", str(abort_patch_source),
+            "--log", str(abort_log),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={abort_plan}",
+        )
+        self.append(
+            "Run confirms abort",
+            {
+                "kind": "abort-confirmed",
+                "after_operation_id": abort_operations[0],
+                "source_ref": "runtime://external-cancellation",
+                "reason": "the bounded attempt was externally cancelled",
+                "evidence_refs": ["abort://confirmation"],
+            },
+            abort_log,
+            goal,
+            abort_plan,
+        )
+        open_projection = self.work / "abort-open-projection.json"
+        self.ok(
+            "Run keeps incomplete abort response open",
+            self.command("k4-run", "project"),
+            "--log", str(abort_log),
+            "--output", str(open_projection),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={abort_plan}",
+        )
+        open_document = read_json(open_projection)["document"]
+        if open_document["halted"] or open_document["execution_result"] is not None:
+            raise AssertionError("incomplete Run was converted into a terminal state")
+        self.passed += 1
+        print("PASS incomplete Run remains open")
+        self.append("Run abort response", abort_result(), abort_log, goal, abort_plan)
+        legacy_halt_source = self.work / "legacy-blocked-halt.json"
+        write_json(
+            legacy_halt_source,
+            {
+                "kind": "halt",
+                "after_operation_id": abort_operations[4],
+                "trigger": "blocked",
+                "budget_evidence_refs": [],
+                "side_effect_evidence_refs": ["abort://residual"],
+                "evidence_refs": ["abort://halt"],
+                "resume_ref": None,
+            },
+        )
+        self.refuse(
+            "Run rejects legacy terminal state",
+            self.command("k4-run", "append"),
+            "--input", str(legacy_halt_source),
+            "--log", str(abort_log),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={abort_plan}",
+        )
+        self.append(
+            "Run abort halt",
+            {
+                "kind": "halt",
+                "after_operation_id": abort_operations[4],
+                "trigger": "abort",
+                "budget_evidence_refs": ["abort://budget"],
+                "side_effect_evidence_refs": ["abort://residual"],
+                "evidence_refs": ["abort://halt"],
+                "resume_ref": "resume://after-cancellation",
+            },
+            abort_log,
+            goal,
+            abort_plan,
+        )
+        abort_finish_input = json.loads(json.dumps(finish_input))
+        abort_finish_input["cutoff"] = "after sourced abort"
+        abort_finish_input["source_refs"] = [
+            "asset://repo",
+            "run://abort-ledger",
+            "accept://abort",
+            "terminal://abort",
+            "abort://confirmation",
+            "abort://halt",
+            "abort://budget",
+            "abort://residual",
+        ]
+        abort_finish_input["delta"] = {
+            "summary": "the aborted attempt was settled without rewriting it as completion",
+            "evidence_refs": ["run://abort-ledger"],
+        }
+        abort_finish_input["items"][0].update({
+            "change_reason": "Run ended by sourced abort",
+            "state": "gap",
+            "statement": "the expected result remains incomplete after abort",
+            "evidence_refs": ["run://abort-ledger"],
+            "route": "none",
+            "route_ref": None,
+        })
+        abort_finish_input["acceptance_results"][0].update({
+            "result": "fail",
+            "actual_refs": ["actual://absent-result"],
+            "comparison_refs": ["comparison://abort-acceptance"],
+            "evidence_refs": ["accept://abort"],
+        })
+        abort_finish_input["terminal_control_results"][0].update({
+            "result": "pass",
+            "actual_refs": ["actual://abort-budget"],
+            "comparison_refs": ["comparison://abort-budget"],
+            "evidence_refs": ["terminal://abort"],
+        })
+        abort_finish_input["result_disposition"] = {
+            "state": "pending",
+            "statement": "the incomplete result remains unadopted",
+            "refs": ["actual://absent-result"],
+        }
+        abort_finish_input["incomplete_deliverable"] = {
+            "statement": "the expected result was not completed",
+            "refs": ["resume://after-cancellation"],
+        }
+        abort_finish = self.work / "abort-finish.json"
+        self.materialize(
+            "Finish abort settlement",
+            "k4-finish",
+            abort_finish_input,
+            abort_finish,
+            [("previous_account", observe0), ("goal", goal), ("plan", abort_plan)],
+            run_log=abort_log,
+        )
+        abort_closure = read_json(abort_finish)["document"]["closure"]
+        if (
+            abort_closure["attempt_result"] != "fail"
+            or abort_closure["run_halt"]["trigger"] != "abort"
+            or abort_closure["run_halt"]["abort"]["response_mode"] != "route"
+            or abort_closure["run_halt"]["abort"]["actual_response_operations"] != 1
+        ):
+            raise AssertionError("Finish did not preserve the abort and its frozen response")
+        self.passed += 1
+        print("PASS Finish preserves abort settlement")
 
         finish_account = read_json(finish)["document"]["account"]
         next_observe = self.work / "observe1.json"
@@ -848,6 +1070,37 @@ class Harness:
                 raise AssertionError(f"migration report falsely preserved {name} file digest")
         self.passed += 1
         print("PASS Migration records explicit schema and digest transitions")
+
+        legacy_050 = self.root / "tests" / "fixtures" / "0.5.0"
+        migrated_060 = self.work / "migrated-0.6.0"
+        self.ok(
+            "Migration rebuilds 0.5.0 chain",
+            str(self.root / "tools" / "migrate-0.5.0-to-0.6.0"),
+            "--observe", str(legacy_050 / "observe0.json"),
+            "--goal", str(legacy_050 / "goal.json"),
+            "--plan", str(legacy_050 / "plan.json"),
+            "--run-log", str(legacy_050 / "run.jsonl"),
+            "--finish", str(legacy_050 / "finish.json"),
+            "--policy", str(legacy_050 / "policy.json"),
+            "--output-dir", str(migrated_060),
+        )
+        report_060 = read_json(migrated_060 / "migration.json")
+        expected_060 = {
+            "goal": ("k4-goal-document/v6", "k4-goal-document/v6"),
+            "plan": ("k4-plan-document/v6", "k4-plan-document/v7"),
+            "run": ("k4-run-event/v5", "k4-run-event/v6"),
+            "finish": ("k4-finish-document/v3", "k4-finish-document/v4"),
+        }
+        for name, (source_schema, target_schema) in expected_060.items():
+            entry = report_060["artifacts"][name]
+            if (entry["from"], entry["to"]) != (source_schema, target_schema):
+                raise AssertionError(f"0.6.0 migration report has wrong {name} schema transition")
+            if name == "goal" and entry["source_sha256"] != entry["target_sha256"]:
+                raise AssertionError("0.6.0 migration did not preserve Goal bytes")
+            if name != "goal" and entry["source_sha256"] == entry["target_sha256"]:
+                raise AssertionError(f"0.6.0 migration falsely preserved {name} file digest")
+        self.passed += 1
+        print("PASS 0.6.0 migration records exact schema and digest transitions")
         print(f"PASS {self.passed} checks")
 
 

@@ -20,7 +20,10 @@ if [ "${1:-}" = "--help" ]; then
         '  difference, selection_rationale: nonempty strings' \
         '  route: {claim, supporting_refs, counter_refs}' \
         '  entry_operation_indices: one or more zero-based starting operations' \
-        '  operations[]: {operation_key, depends_on_indices, satisfies, controlled_by, tool_ref,' \
+        '  on_abort: {mode: preserve-only | route, entry_operation_index, reason}' \
+        '    preserve-only requires a null entry and no abort-phase operation' \
+        '    route requires one abort-phase entry operation' \
+        '  operations[]: {phase: normal | abort, operation_key, depends_on_indices, satisfies, controlled_by, tool_ref,' \
         '    responsible_ref, read_refs, write_refs, permission_refs, resource_refs,' \
         '    maximum_side_effects, pre_checks, post_checks, idempotency,' \
         '    retry_limit, recovery, on_result}' \
@@ -31,6 +34,7 @@ if [ "${1:-}" = "--help" ]; then
         'Dependency indices identify earlier operations; result edges identify only later ones.' \
         'An empty result successor reaches end; multiple successors form a fork.' \
         'Multiple exact dependencies form a join and must all route to that operation.' \
+        'Normal and abort result edges remain in their own phase; abort operations cannot satisfy Goal points.' \
         'Every operation tool, permission, read/write position, resource, and effect' \
         'must be contained in the frozen Goal execution envelope.' \
         '' \

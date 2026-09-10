@@ -12,7 +12,7 @@ The Resource publishes:
 3. one stage-neutral deterministic Tool;
 4. one Skill-local CUE contract per Skill;
 5. one generated Manifest;
-6. one explicit prior-version migration Tool;
+6. explicit adjacent-version migration Tools and frozen target contracts;
 7. one isolated conformance suite.
 
 The Skills are peers. Consumption order creates neither actor hierarchy nor
@@ -37,10 +37,11 @@ The shared Tool has no stage vocabulary. It provides only:
 
 The Tool owns canonical JSON, generated time, content and file digests, event
 sequence and predecessor digest, exclusive creation, append locking, flushing,
-and failure-before-write. CUE owns the meaning of accepted data. The separate,
-version-specific migration Tool consumes a complete `0.4.1` chain and an
-explicit policy for fields that cannot be inferred; it then calls the current
-public entrypoints to re-materialize a `0.5.0` chain.
+and failure-before-write. CUE owns the meaning of accepted data. Each
+version-specific migration Tool consumes one exact source chain and an explicit
+policy for fields that cannot be inferred. The `0.4.1` migration uses frozen
+`0.5.0` CUE contracts, so later releases cannot silently alter its target. The
+`0.5.0` migration calls the current public entrypoints to build a `0.6.0` chain.
 
 ## 3. Five unequal contracts
 
@@ -50,11 +51,13 @@ public entrypoints to re-materialize a `0.5.0` chain.
   including its selection rationale, exact execution envelope, and sourceable
   judge identities.
 - Plan accepts one exact frozen Goal and freezes one selected forward binary
-  operation DAG, including its selection rationale and topology projection.
+  operation DAG, including its selection rationale, topology projection, and
+  Plan-level abort response.
   Every operational permission, position, resource, tool, and maximum effect
   is mechanically contained by the Goal envelope.
 - Run accepts one exact Goal, Plan, existing ledger, and candidate event. It
-  validates graph activation and appends only operation, patch, or halt facts.
+  validates graph activation and appends only operation, patch,
+  abort-confirmation, or halt facts.
 - Finish accepts the exact opening Account, Goal, Plan, and halted Run ledger.
   The Tool derives its Run projection, then derives the settlement report and
   materializes the next Account. Its judgments identify the exact judges
@@ -87,16 +90,22 @@ the closing settlement report. Neither report is a second ledger.
 
 Plan input uses operation indices so a caller does not hand-generate content
 identities. The contract generates operation ids and replaces index references
-with exact ids. Dependencies and result edges must point forward. It derives
-start, fork, join, and end positions from the selected graph.
+with exact ids. Every operation is either `normal` or `abort`; dependencies and
+result edges must point forward and cannot cross phases. Plan owns one
+`on_abort` response: `preserve-only`, or a separate abort-route entry. It
+derives start, fork, join, and end positions from the selected graph.
 
 Run treats that graph as scheduling authority. Only `pass` and `fail` choose an
-edge. Findings and unknowns are event annotations. At most one emergency patch
-may precede an activated operation response, and its verification scope is
-fixed to mainline resumption. The projection retains every Plan operation as
-`pass`, `fail`, or `not-run` while the journal remains the only process history.
-Patch tools, permissions, read/write positions, resources, and maximum effects
-remain inside the Goal envelope rather than widening it at runtime.
+operation edge. Findings and unknowns are event annotations. At most one
+emergency patch may precede an activated normal operation response, and its
+verification scope is fixed to mainline resumption. Abort requires one sourced
+external cancellation or recoverable runtime fact; Run then follows only the
+Plan's frozen response and cannot patch that response. A halt is exactly
+`plan-complete` or `abort`; an incomplete ledger is merely open. The projection
+retains every Plan operation as `pass`, `fail`, or `not-run` while the journal
+remains the only process history. Patch tools, permissions, read/write
+positions, resources, and maximum effects remain inside the Goal envelope
+rather than widening it at runtime.
 
 ## 6. Stable and temporary state
 
@@ -144,15 +153,17 @@ The isolated suite exercises one complete cycle, including:
 - multi-lens Observe bootstrap and Finish-to-Observe continuity;
 - a frozen Goal that retains an unknown annotation;
 - rejection of a frozen Goal without acceptance and of an unavailable judge;
-- forward binary Plan routing with fork and join projections;
+- forward binary Plan routing with fork and join projections, separated normal
+  and abort phases, and a Plan-owned abort response;
 - six-family Goal-envelope containment for Plan operations and emergency patches;
 - Run activation, one emergency patch, patch refusal on repetition, binary
-  results, halt, and projection;
+  results, explicit abort confirmation, two-state halt, and projection;
 - Finish settlement in which a failed operation is recovered by the frozen
   route and the Goal still passes;
 - Finish rejection of an actual judge that differs from Goal;
 - legal zero-control and zero-patch settlement;
-- full `0.4.1` to `0.5.0` chain migration with explicit digest transitions;
+- full adjacent `0.4.1` to `0.5.0` and `0.5.0` to `0.6.0` chain migrations with
+  explicit digest transitions;
 - refusal of a Plan back edge and an unactivated Run operation.
 
 Passing proves only these mechanical contracts. It does not prove evidence

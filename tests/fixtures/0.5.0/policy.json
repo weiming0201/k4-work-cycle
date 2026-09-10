@@ -1,0 +1,7 @@
+{
+  "legacy_abort_source_ref": null,
+  "on_abort": {
+    "mode": "preserve-only",
+    "reason": "The legacy fixture completed normally and declares evidence preservation as its explicit abort response."
+  }
+}

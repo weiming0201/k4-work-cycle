@@ -19,13 +19,16 @@ Freeze the task-specific control flow that Run will consume.
 - Every operation has exactly two result edges, `pass` and `fail`. Both may
   point to the same successor. Fork, join, and end are structural positions,
   not semantic result types.
+- Freeze one Plan-level `on_abort` response: preserve evidence only, or enter
+  one separate forward response route. Abort is not a third operation result,
+  and response operations cannot claim Goal acceptance.
 - Findings and unknowns remain annotations. They do not create a third route.
 - Do not alter Goal criteria, perform work, record actual results, or repair
   missing authority.
 
 ## Stable result
 
-The selected Plan fixes the entry, operation graph, Goal coverage, tools,
+The selected Plan fixes the normal entry, Plan-level abort response, operation graph, Goal coverage, tools,
 read/write positions, permissions, resources, maximum effects, checks, and
 both result edges. Every operational boundary is a subset of the Goal envelope.
 All graph edges move forward in topological order. A change to those decisions

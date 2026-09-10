@@ -1,0 +1,83 @@
+{
+  "bindings": {
+    "previous_account": null
+  },
+  "content_sha256": "26ac6ddfeca389528f7531ab199a6d325a29e68cc0d30374e2a063284aedc77a",
+  "document": {
+    "account": {
+      "boundary": "only the isolated repository fixture",
+      "cutoff": "fixture baseline",
+      "delta": {
+        "evidence_refs": [
+          "asset://repo"
+        ],
+        "summary": "initial source inspection"
+      },
+      "items": [
+        {
+          "change": "added",
+          "change_reason": "initial observation",
+          "epistemic_kind": "fact",
+          "evidence_refs": [
+            "asset://repo"
+          ],
+          "item_id": "item-e84d0189dc3b73ee",
+          "lens": "delivery",
+          "previous_item_id": null,
+          "route": "goal-candidate",
+          "route_ref": null,
+          "state": "gap",
+          "statement": "the expected result is absent"
+        },
+        {
+          "change": "added",
+          "change_reason": "initial observation",
+          "epistemic_kind": "source-statement",
+          "evidence_refs": [
+            "asset://repo"
+          ],
+          "item_id": "item-d90b5e0ca744e4b8",
+          "lens": "structure",
+          "previous_item_id": null,
+          "route": "retain",
+          "route_ref": null,
+          "state": "aligned",
+          "statement": "the fixture boundary is addressable"
+        }
+      ],
+      "lens_index": [
+        {
+          "item_ids": [
+            "item-e84d0189dc3b73ee"
+          ],
+          "lens": "delivery"
+        },
+        {
+          "item_ids": [
+            "item-d90b5e0ca744e4b8"
+          ],
+          "lens": "structure"
+        }
+      ],
+      "lenses": [
+        "delivery",
+        "structure"
+      ],
+      "retired": [],
+      "revision": 0,
+      "source_refs": [
+        "asset://repo"
+      ],
+      "subject": "isolated repository"
+    },
+    "observation": {
+      "goal_candidate_ids": [
+        "item-e84d0189dc3b73ee"
+      ],
+      "mode": "bootstrap",
+      "status": "open"
+    }
+  },
+  "generated_unix_ms": 1789043713387,
+  "schema": "k4-observe-document/v2"
+}

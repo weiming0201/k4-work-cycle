@@ -92,7 +92,7 @@ context: _
 	document: #Document
 })
 #PreviousEnvelope: {
-	schema:            "k4-observe-document/v2" | "k4-finish-document/v3"
+	schema:            "k4-observe-document/v2" | "k4-finish-document/v4"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
