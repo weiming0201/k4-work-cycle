@@ -23,8 +23,9 @@ if [ "${1:-}" = "--help" ]; then
         '  mode: bootstrap | iterate' \
         '  subject, boundary, cutoff: nonempty strings' \
         '  source_refs: unique nonempty strings' \
+        '  lenses: unique nonempty observation-lens names' \
         '  delta: {summary, evidence_refs}' \
-        '  items[]: {change, previous_item_id, change_reason, epistemic_kind,' \
+        '  items[]: {lens, change, previous_item_id, change_reason, epistemic_kind,' \
         '            state, statement, evidence_refs, route, route_ref}' \
         '  retired[]: {previous_item_id, reason, evidence_refs}' \
         '  change: retained | changed | added' \
@@ -37,7 +38,7 @@ if [ "${1:-}" = "--help" ]; then
         '  Bootstrap a new Account when either one changes.' \
         '' \
         'Output:' \
-        '  The stable Observe envelope stores the full Account under document.account.' \
+        '  The stable Observe envelope stores the full Account and generated lens index.' \
         '' \
         'Exit status: 0 on materialization; 1 without output on refusal.'
     exit 0

@@ -3,10 +3,10 @@
 This Resource packages five responsibilities over four storage strategies as
 peer Agent Skills:
 
-- `k4-observe`: creates the opening Account and its gap/opportunity report;
+- `k4-observe`: creates the multi-lens opening Account and gap/opportunity report;
 - `k4-goal`: freezes one flat mandate of acceptance and operating limits;
-- `k4-plan`: assigns and orders permitted work in an operation DAG;
-- `k4-run`: appends actual operation and halt facts to the journal;
+- `k4-plan`: freezes forward pass/fail work in an operation DAG;
+- `k4-run`: appends operation, emergency-patch, and halt facts to the journal;
 - `k4-finish`: reconciles the journal into the closing Account and stage report.
 
 Observe and Finish share the Account storage strategy but remain separate

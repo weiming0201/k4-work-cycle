@@ -18,8 +18,9 @@ if [ "${1:-}" = "--help" ]; then
         '  --bind plan=FILE  exact executable Plan' \
         '' \
         'Output:' \
-        '  The current Run view contains operations, invariant observations,' \
-        '  execution result, halt position, event count, and ledger head.' \
+        '  The current Run view contains operation pass/fail results, patches,' \
+        '  Findings, unknowns, invariant observations, halt position, event' \
+        '  count, and ledger head.' \
         '  It contains no Goal acceptance or terminal-control judgment.' \
         '' \
         'Exit status: 0 on projection; 1 on invalid log, binding, or unsafe write.'

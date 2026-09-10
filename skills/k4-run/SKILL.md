@@ -1,42 +1,45 @@
 ---
 name: k4-run
-description: Execute one exact Goal and Plan by appending actual operation and halt facts to a chained ledger and mechanically projecting current execution state. Use after k4-plan; do not judge terminal acceptance, replan, widen authority, adopt output, or choose the next Goal.
+description: Execute one exact selected Plan to its end by recording pass/fail operation results, emergency patches, and halt facts in a chained ledger. Use after k4-plan; do not replan or perform Finish.
 ---
 
 # K4 Run
 
-Use this Skill only to perform the frozen Plan and record what actually happens.
+Perform the selected Plan and preserve what actually happens.
 
 ## Boundary
 
 - Require one exact frozen Goal and its exact executable Plan; otherwise return
   to the earliest missing predecessor without starting Run.
-- Before each operation recheck dependencies, tool, paths, permissions,
-  resources, checks, budget, effects, and invariant controls.
-- Attempt only one eligible Plan operation per increment and append its actual
-  result, outputs, evidence, trace, invariant observations, and deferred issues.
-- Append one halt event when no next operation will be attempted. Preserve the
-  actual halt position, trigger, budget/effect evidence, and resume evidence.
+- The frozen graph is the scheduling authority. Execute every activated
+  operation once, record `pass` or `fail`, and follow only its frozen result
+  edge. Forks activate all branches; joins wait for their dependencies.
+- Search, inspect, and choose implementation details as needed for the active
+  operation within the Goal's authority. Findings and unknowns may be recorded
+  on either result and do not change routing.
+- If a significant Plan omission prevents the active operation, one emergency
+  patch attempt is allowed for that operation. Record its script, exact
+  positions, effects, application result, Finding, and unknowns. Do not add a
+  separate systematic test for the patch; retry the original operation and let
+  that operation produce the pass/fail result.
+- Halt as `plan-complete` when every activated branch reaches end. Halt as
+  `blocked` only when the frozen route cannot continue within authority even
+  after the permitted patch; preserve cancellation as cancellation.
 - Never edit an event. A projection is reconstructible state, not history.
-- Do not judge Goal acceptance or terminal controls, declare overall completion,
-  repair, replan, widen scope, adopt, or choose a next Goal.
+- Do not change the Goal or Plan, judge final Goal acceptance, adopt output, or
+  choose a next Goal.
 
-## Form one semantic event
+## Stable events
 
-After one governed operation, describe its Plan identity, eligibility, actual
-outputs, evidence, trace, result, every mapped invariant-control observation,
-and all deferred issues. An out-of-scope issue is recorded but not investigated
-or acted on. A drift affecting the operation prevents a passing result.
-
-When execution stops, append a halt with actual position, trigger, observed
-budget and effects, evidence, and available resume reference. Halt is an
-execution fact; Finish determines the attempt's terminal judgment.
+Append an immutable event after each operation or emergency patch. When Run
+stops, append the actual halt. The ledger is the complete linear source for
+Finish; the projection is only its current derived view.
 
 ## Append and project
 
-Run `scripts/append --help` before authoring each temporary event. Append it
-through the script with exact Goal and Plan bindings. Use `scripts/project` to
-create an absent derived view from the complete ledger.
+Run `scripts/append --help` for the public event contract. Append through the
+script with exact Goal and Plan bindings. Use `scripts/project` to create an
+absent derived view from the complete ledger.
 
 Do not hand-author, patch, reorder, truncate, or replace stable events.
 Ordinary use does not require reading the CUE contract or Tool source. Correct

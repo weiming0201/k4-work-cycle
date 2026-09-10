@@ -1,41 +1,39 @@
 ---
 name: k4-plan
-description: Freeze one exact Goal into a single-use operation DAG with explicit dependencies, tools, paths, permissions, effects, checks, concurrency guards, and recovery. Use after k4-goal and before execution; do not perform operations or revise the Goal.
+description: Freeze one exact Goal into one selected, finite operation DAG with pass/fail routing. Use after k4-goal and before execution; do not perform operations or revise the Goal.
 ---
 
 # K4 Plan
 
-Use this Skill only to freeze the permitted transition from the Goal baseline
-to its predicted terminal state.
+Freeze the task-specific control flow that Run will consume.
 
 ## Boundary
 
 - Require one exact frozen Goal; otherwise return to `k4-goal`.
 - Select tools only from the Goal's frozen available set.
-- Give every operation explicit dependencies, served Goal points and controls,
-  executor, readable and writable positions, permissions, resources, maximum
-  effects, pre/post checks, retry ceiling, and recovery.
-- Treat absent dependency information as unknown concurrency. Parallelism
-  exists only in an explicit guarded group without a dependency path.
+- Search, inspect, and compare alternatives as needed within the Goal boundary.
+- For a complex Goal, compare two or three materially different candidate DAGs
+  when that comparison improves selection; freeze only the selected Plan and a
+  concise selection rationale.
+- Every operation has exactly two result edges, `pass` and `fail`. Both may
+  point to the same successor. Fork, join, and end are structural positions,
+  not semantic result types.
+- Findings and unknowns remain annotations. They do not create a third route.
 - Do not alter Goal criteria, perform work, record actual results, or repair
   missing authority.
 
-## Form the semantic input
+## Stable result
 
-State one falsifiable baseline-to-target difference, selected route, supporting
-evidence, and counterevidence. Then define the operation DAG. Use an explicit
-`none:` reference for an intentionally empty boundary; silence is not a
-boundary. Record blockers and unknowns instead of hiding them in an operation.
-
-The Plan must make Run simpler: after dependency and guard checks, each node
-already fixes what may be read, written, called, affected, checked, retried,
-and recovered. A change to any of those decisions requires a new Plan.
+The selected Plan fixes the entry, operation graph, Goal coverage, available
+tools, read/write positions, permissions, resources, maximum effects, checks,
+and both result edges. All graph edges move forward in topological order. A
+change to those decisions requires a new Plan.
 
 ## Materialize
 
-Run `scripts/materialize --help` before authoring input. Give temporary semantic
-JSON to the script and bind the exact Goal. The deterministic Tool creates an
-absent stable DAG.
+Run `scripts/materialize --help` for the public input contract. Give temporary
+semantic JSON to the script and bind the exact Goal. The deterministic Tool
+creates the stable DAG and its start/fork/join/end projection.
 
 Do not hand-author or patch stable JSON. Ordinary use does not require reading
 the CUE contract or Tool source. Correct named public omissions or

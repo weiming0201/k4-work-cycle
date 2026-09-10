@@ -23,7 +23,7 @@ context: _
 	content_sha256: #Digest
 })
 #ObserveEnvelope: close({
-	schema:            "k4-observe-document/v1"
+	schema:            "k4-observe-document/v2"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -76,7 +76,6 @@ context: _
 	required_trace:      #NonEmptyStrings
 	check_method:        #Text
 	check_timing:        "invariant" | "terminal"
-	on_non_pass:         #Text
 })
 #Control: close({
 	control_id:          #ControlID
@@ -89,13 +88,6 @@ context: _
 	required_trace:      #NonEmptyStrings
 	check_method:        #Text
 	check_timing:        "invariant" | "terminal"
-	on_non_pass:         #Text
-})
-#Stops: close({
-	completed: #Text
-	paused:    #Text
-	failed:    #Text
-	cancelled: #Text
 })
 #ExecutionEnvelope: close({
 	authorization_ref:         #Text
@@ -105,8 +97,6 @@ context: _
 	resources:                 #NonEmptyStrings
 	budget:                    #Text
 	maximum_side_effects:      #NonEmptyStrings
-	stop_conditions:           #Stops
-	incomplete_deliverable:    #Text
 })
 #Cutoff: close({
 	at:            #Text
@@ -114,14 +104,15 @@ context: _
 })
 #Input: close({
 	observe_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
-	objective:          #Text
-	target:             #Text
-	source_refs:        #NonEmptyStrings
-	evidence_cutoff:    #Cutoff
-	baseline_refs:      #NonEmptyStrings
-	scope:              #NonEmptyStrings
-	non_goals:          #Strings
-	execution_envelope: #ExecutionEnvelope
+	objective:           #Text
+	selection_rationale: #Text
+	target:              #Text
+	source_refs:         #NonEmptyStrings
+	evidence_cutoff:     #Cutoff
+	baseline_refs:       #NonEmptyStrings
+	scope:               #NonEmptyStrings
+	non_goals:           #Strings
+	execution_envelope:  #ExecutionEnvelope
 	acceptance_points: [...#PointInput]
 	control_contracts: [...#ControlInput]
 	blockers: #Strings
@@ -129,29 +120,30 @@ context: _
 })
 #Document: close({
 	observe_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
-	objective:          #Text
-	target:             #Text
-	source_refs:        #NonEmptyStrings
-	evidence_cutoff:    #Cutoff
-	baseline_refs:      #NonEmptyStrings
-	scope:              #NonEmptyStrings
-	non_goals:          #Strings
-	execution_envelope: #ExecutionEnvelope
+	objective:           #Text
+	selection_rationale: #Text
+	target:              #Text
+	source_refs:         #NonEmptyStrings
+	evidence_cutoff:     #Cutoff
+	baseline_refs:       #NonEmptyStrings
+	scope:               #NonEmptyStrings
+	non_goals:           #Strings
+	execution_envelope:  #ExecutionEnvelope
 	acceptance_points: [...#Point]
 	control_contracts: [...#Control]
 	blockers: #Strings
 	unknowns: #Strings
-	status:   "frozen" | "not-frozen" | "unknown"
+	status:   "frozen" | "not-frozen"
 })
 #Envelope: close({
-	schema:            "k4-goal-document/v4"
+	schema:            "k4-goal-document/v5"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({observe: #Binding})
 	document: #Document
 })
 
-_input:           #Input & context.input
+_input:             #Input & context.input
 _observe:           #BoundObserve & context.bindings.observe
 _observeCandidates: _observe.value.document.observation.goal_candidate_ids
 for id in _input.observe_item_ids {
@@ -187,36 +179,35 @@ _controls: [for control in _input.control_contracts {
 		required_trace:      control.required_trace
 		check_method:        control.check_method
 		check_timing:        control.check_timing
-		on_non_pass:         control.on_non_pass
 	})
 }]
 _controlIDs: [for control in _controls {control.control_id}]
 _controlIDsUnique: list.UniqueItems(_controlIDs) & true
 
-_status: *"frozen" | "not-frozen" | "unknown"
+_status: *"frozen" | "not-frozen"
 if len(_input.blockers) > 0 {_status: "not-frozen"}
-if len(_input.blockers) == 0 && len(_input.unknowns) > 0 {_status: "unknown"}
 if _status == "frozen" && len(_points) == 0 {_invalid: _|_}
 
 _document: #Document & {
-	observe_item_ids:   _input.observe_item_ids
-	objective:          _input.objective
-	target:             _input.target
-	source_refs:        _input.source_refs
-	evidence_cutoff:    _input.evidence_cutoff
-	baseline_refs:      _input.baseline_refs
-	scope:              _input.scope
-	non_goals:          _input.non_goals
-	execution_envelope: _input.execution_envelope
-	acceptance_points:  _points
-	control_contracts:  _controls
-	blockers:           _input.blockers
-	unknowns:           _input.unknowns
-	status:             _status
+	observe_item_ids:    _input.observe_item_ids
+	objective:           _input.objective
+	selection_rationale: _input.selection_rationale
+	target:              _input.target
+	source_refs:         _input.source_refs
+	evidence_cutoff:     _input.evidence_cutoff
+	baseline_refs:       _input.baseline_refs
+	scope:               _input.scope
+	non_goals:           _input.non_goals
+	execution_envelope:  _input.execution_envelope
+	acceptance_points:   _points
+	control_contracts:   _controls
+	blockers:            _input.blockers
+	unknowns:            _input.unknowns
+	status:              _status
 }
 
 generate: _generateChecks & close({
-	schema: "k4-goal-document/v4"
+	schema: "k4-goal-document/v5"
 	bindings: close({observe: _observe.binding})
 	document: _document
 })
@@ -258,15 +249,13 @@ _expectedExistingControlIDs: [for control in _existing.document.control_contract
 		required_trace:      control.required_trace
 		check_method:        control.check_method
 		check_timing:        control.check_timing
-		on_non_pass:         control.on_non_pass
 	})))), 0, 16))"
 }]
 for index, control in _existing.document.control_contracts {
 	if control.control_id != _expectedExistingControlIDs[index] {_invalid: _|_}
 }
 if len(_existing.document.blockers) > 0 && _existing.document.status != "not-frozen" {_invalid: _|_}
-if len(_existing.document.blockers) == 0 && len(_existing.document.unknowns) > 0 && _existing.document.status != "unknown" {_invalid: _|_}
-if len(_existing.document.blockers) == 0 && len(_existing.document.unknowns) == 0 && _existing.document.status != "frozen" {_invalid: _|_}
+if len(_existing.document.blockers) == 0 && _existing.document.status != "frozen" {_invalid: _|_}
 if _existing.document.status == "frozen" && len(_existing.document.acceptance_points) == 0 {_invalid: _|_}
 
 validate: _validateChecks & _existing

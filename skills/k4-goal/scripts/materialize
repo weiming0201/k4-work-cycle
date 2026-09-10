@@ -17,16 +17,15 @@ if [ "${1:-}" = "--help" ]; then
         '  --bind observe=FILE  exact current Observe Account' \
         '' \
         'Semantic input:' \
-        '  objective, target: nonempty strings' \
+        '  objective, selection_rationale, target: nonempty strings' \
         '  observe_item_ids, source_refs, baseline_refs, scope: nonempty unique string arrays' \
         '  non_goals: unique string array; may be empty' \
         '  evidence_cutoff: {at: nonempty string, included_refs: nonempty unique string array}' \
         '  execution_envelope: {authorization_ref, authorization_scope,' \
         '    authorization_claim_limit, available_tools, resources, budget,' \
-        '    maximum_side_effects, stop_conditions, incomplete_deliverable}' \
+        '    maximum_side_effects}' \
         '  execution_envelope.available_tools, resources, maximum_side_effects:' \
         '    nonempty unique string arrays; its other fields are nonempty strings' \
-        '  stop_conditions: {completed, paused, failed, cancelled}' \
         '  acceptance_points[]: {statement, required_evidence, judge, acceptance}' \
         '  acceptance: {observable, conditions, window, expected, falsifier,' \
         '    comparison_method, sampling_rule}' \
@@ -34,14 +33,14 @@ if [ "${1:-}" = "--help" ]; then
         '    nonempty unique string arrays; their other semantic fields are strings' \
         '  control_contracts[]: {statement, required_evidence, judge,' \
         '    controlled_variable, allowed_domain, forbidden_drift,' \
-        '    required_trace, check_method, check_timing, on_non_pass}' \
+        '    required_trace, check_method, check_timing}' \
         '  required_evidence, allowed_domain, forbidden_drift, required_trace:' \
         '    nonempty unique string arrays' \
         '  check_timing: invariant | terminal' \
         '  judge: {kind, claim_limit}; kind is self | independent-agent | script | human' \
         '  blockers, unknowns: unique string arrays; may be empty' \
-        '  nonempty blockers produce not-frozen; otherwise nonempty unknowns produce unknown;' \
-        '    both empty produce frozen, which also requires at least one acceptance point' \
+        '  nonempty blockers produce not-frozen; otherwise status is frozen.' \
+        '  Unknowns are retained annotations; frozen requires at least one acceptance point.' \
         '' \
         'Output:' \
         '  The stable Goal is stored in the output envelope under document.' \

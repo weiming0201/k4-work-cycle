@@ -17,16 +17,20 @@ if [ "${1:-}" = "--help" ]; then
         '  --bind goal=FILE  exact predecessor Goal' \
         '' \
         'Semantic input:' \
-        '  difference: nonempty baseline-to-target statement' \
+        '  difference, selection_rationale: nonempty strings' \
         '  route: {claim, supporting_refs, counter_refs}' \
-        '  operations[]: {depends_on_indices, satisfies, controlled_by, tool_ref,' \
+        '  entry_operation_indices: one or more zero-based starting operations' \
+        '  operations[]: {operation_key, depends_on_indices, satisfies, controlled_by, tool_ref,' \
         '    responsible_ref, read_refs, write_refs, permission_refs, resource_refs,' \
         '    maximum_side_effects, pre_checks, post_checks, idempotency,' \
-        '    retry_limit, recovery}' \
-        '  parallel_groups[]: {operation_indices, reason, guards}' \
+        '    retry_limit, recovery, on_result}' \
+        '  on_result: {pass, fail}' \
+        '  each result edge: {next_operation_indices, reason}' \
         '  blockers, unknowns' \
         '' \
-        'Indices are zero-based and may reference only earlier operations.' \
+        'Dependency indices identify earlier operations; result edges identify only later ones.' \
+        'An empty result successor reaches end; multiple successors form a fork.' \
+        'Multiple exact dependencies form a join and must all route to that operation.' \
         '' \
         'Output:' \
         '  The stable Plan is stored in the output envelope under document.' \

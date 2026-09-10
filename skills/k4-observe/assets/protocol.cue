@@ -21,14 +21,16 @@ context: _
 	content_sha256: #Digest
 })
 #ItemCore: close({
+	lens:           #Text
 	epistemic_kind: "fact" | "source-statement" | "inference" | "preference" | "unknown"
-	state:           "aligned" | "gap" | "conflict" | "unknown"
-	statement:       #Text
-	evidence_refs:   #NonEmptyStrings
-	route:           "none" | "goal-candidate" | "retain" | "external"
-	route_ref:       null | #Text
+	state:          "aligned" | "gap" | "conflict" | "unknown"
+	statement:      #Text
+	evidence_refs:  #NonEmptyStrings
+	route:          "none" | "goal-candidate" | "retain" | "external"
+	route_ref:      null | #Text
 })
 #ItemInput: close({
+	lens:             #ItemCore.lens
 	change:           "retained" | "changed" | "added"
 	previous_item_id: null | #ItemID
 	change_reason:    #Text
@@ -41,6 +43,7 @@ context: _
 })
 #Item: close({
 	item_id:          #ItemID
+	lens:             #ItemCore.lens
 	change:           "retained" | "changed" | "added"
 	previous_item_id: null | #ItemID
 	change_reason:    #Text
@@ -66,30 +69,32 @@ context: _
 	boundary:    #Text
 	cutoff:      #Text
 	source_refs: #NonEmptyStrings
-	delta:       #Delta
-	items:       [#Item, ...#Item]
-	retired:     [...#Retired]
+	lenses:      #NonEmptyStrings
+	lens_index: [...close({lens: #Text, item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()})]
+	delta: #Delta
+	items: [#Item, ...#Item]
+	retired: [...#Retired]
 })
 #Observation: close({
-	mode:               "bootstrap" | "iterate"
+	mode: "bootstrap" | "iterate"
 	goal_candidate_ids: [...#ItemID] & list.UniqueItems()
-	status:             "aligned" | "open" | "unknown"
+	status: "aligned" | "open"
 })
 #Document: close({
 	account:     #Account
 	observation: #Observation
 })
 #Envelope: close({
-	schema:            "k4-observe-document/v1"
+	schema:            "k4-observe-document/v2"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({previous_account: null | #Binding})
 	document: #Document
 })
 #PreviousEnvelope: {
-	schema: "k4-observe-document/v1" | "k4-finish-document/v1"
+	schema:            "k4-observe-document/v2" | "k4-finish-document/v2"
 	generated_unix_ms: uint
-	content_sha256: #Digest
+	content_sha256:    #Digest
 	bindings: {...}
 	document: {
 		account: #Account
@@ -106,9 +111,10 @@ context: _
 	boundary:    #Text
 	cutoff:      #Text
 	source_refs: #NonEmptyStrings
+	lenses:      #NonEmptyStrings
 	delta:       #Delta
-	items:       [#ItemInput, ...#ItemInput]
-	retired:     [...#Retired]
+	items: [#ItemInput, ...#ItemInput]
+	retired: [...#Retired]
 })
 
 _input:    #Input & context.input
@@ -125,15 +131,17 @@ if _previous.value != null {
 
 _generatedItems: [for item in _input.items {
 	_core: close({
+		lens:           item.lens
 		epistemic_kind: item.epistemic_kind
-		state:           item.state
-		statement:       item.statement
-		evidence_refs:   item.evidence_refs
-		route:           item.route
-		route_ref:       item.route_ref
+		state:          item.state
+		statement:      item.statement
+		evidence_refs:  item.evidence_refs
+		route:          item.route
+		route_ref:      item.route_ref
 	})
 	close({
 		item_id:          "item-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(_core))), 0, 16))"
+		lens:             item.lens
 		change:           item.change
 		previous_item_id: item.previous_item_id
 		change_reason:    item.change_reason
@@ -161,6 +169,7 @@ if _previous.value != null {_revision: _previous.value.document.account.revision
 _generateChecks: {
 	_itemIDsUnique: list.UniqueItems(_itemIDs) & true
 	for item in _generatedItems {
+		if !list.Contains(_input.lenses, item.lens) {_invalid: _|_}
 		if item.route == "external" && item.route_ref == null {_invalid: _|_}
 		if item.route != "external" && item.route_ref != null {_invalid: _|_}
 		for ref in item.evidence_refs {
@@ -169,6 +178,9 @@ _generateChecks: {
 		if item.change != "retained" {
 			if len([for ref in item.evidence_refs if list.Contains(_input.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: _|_}
 		}
+	}
+	for lens in _input.lenses {
+		if len([for item in _generatedItems if item.lens == lens {item}]) == 0 {_invalid: _|_}
 	}
 	for retired in _input.retired {
 		for ref in retired.evidence_refs {
@@ -221,11 +233,14 @@ _generateChecks: {
 }
 
 _goalCandidates: [for item in _generatedItems if item.route == "goal-candidate" {item.item_id}]
-_unknownItems: [for item in _generatedItems if item.state == "unknown" {item.item_id}]
-_openItems: [for item in _generatedItems if item.state == "gap" || item.state == "conflict" {item.item_id}]
-_status: *"aligned" | "open" | "unknown"
-if len(_unknownItems) > 0 {_status: "unknown"}
-if len(_unknownItems) == 0 && len(_openItems) > 0 {_status: "open"}
+_lensIndex: [for lensName in _input.lenses {close({
+	lens: lensName
+	item_ids: [for item in _generatedItems if item.lens == lensName {item.item_id}]
+})
+}]
+_openItems: [for item in _generatedItems if item.state != "aligned" {item.item_id}]
+_status: *"aligned" | "open"
+if len(_openItems) > 0 {_status: "open"}
 
 _document: #Document & {
 	account: {
@@ -234,6 +249,8 @@ _document: #Document & {
 		boundary:    _input.boundary
 		cutoff:      _input.cutoff
 		source_refs: _input.source_refs
+		lenses:      _input.lenses
+		lens_index:  _lensIndex
 		delta:       _input.delta
 		items:       _generatedItems
 		retired:     _input.retired
@@ -245,7 +262,7 @@ _document: #Document & {
 	}
 }
 generate: _generateChecks & close({
-	schema:   "k4-observe-document/v1"
+	schema:   "k4-observe-document/v2"
 	bindings: _bindings
 	document: _document
 })
@@ -254,19 +271,28 @@ _existing: #Envelope & context.existing & {bindings: _bindings}
 _existingIDs: [for item in _existing.document.account.items {item.item_id}]
 _expectedExistingIDs: [for item in _existing.document.account.items {
 	"item-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(close({
+		lens:           item.lens
 		epistemic_kind: item.epistemic_kind
-		state:           item.state
-		statement:       item.statement
-		evidence_refs:   item.evidence_refs
-		route:           item.route
-		route_ref:       item.route_ref
+		state:          item.state
+		statement:      item.statement
+		evidence_refs:  item.evidence_refs
+		route:          item.route
+		route_ref:      item.route_ref
 	})))), 0, 16))"
 }]
 _expectedCandidates: [for item in _existing.document.account.items if item.route == "goal-candidate" {item.item_id}]
-_existingUnknown: [for item in _existing.document.account.items if item.state == "unknown" {item.item_id}]
-_existingOpen: [for item in _existing.document.account.items if item.state == "gap" || item.state == "conflict" {item.item_id}]
+_expectedLensIndex: [for lensName in _existing.document.account.lenses {close({
+	lens: lensName
+	item_ids: [for item in _existing.document.account.items if item.lens == lensName {item.item_id}]
+})
+}]
+_existingOpen: [for item in _existing.document.account.items if item.state != "aligned" {item.item_id}]
 _existingEvidence: list.Concat(list.Concat([
 	[for item in _existing.document.account.items {item.evidence_refs}],
+	[for item in _existing.document.account.retired {item.evidence_refs}],
+]))
+_existingChangeEvidence: list.Concat(list.Concat([
+	[for item in _existing.document.account.items if item.change != "retained" {item.evidence_refs}],
 	[for item in _existing.document.account.retired {item.evidence_refs}],
 ]))
 
@@ -274,28 +300,72 @@ _validateChecks: {
 	_idsUnique: list.UniqueItems(_existingIDs) & true
 	for index, item in _existing.document.account.items {
 		if item.item_id != _expectedExistingIDs[index] {_invalid: _|_}
+		if !list.Contains(_existing.document.account.lenses, item.lens) {_invalid: _|_}
 		if item.route == "external" && item.route_ref == null {_invalid: _|_}
 		if item.route != "external" && item.route_ref != null {_invalid: _|_}
 		for ref in item.evidence_refs {
 			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: _|_}
 		}
+		if item.change != "retained" {
+			if len([for ref in item.evidence_refs if list.Contains(_existing.document.account.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: _|_}
+		}
+	}
+	for lens in _existing.document.account.lenses {
+		if len([for item in _existing.document.account.items if item.lens == lens {item}]) == 0 {_invalid: _|_}
+	}
+	for retired in _existing.document.account.retired {
+		for ref in retired.evidence_refs {
+			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: _|_}
+			if !list.Contains(_existing.document.account.delta.evidence_refs, ref) {_invalid: _|_}
+		}
 	}
 	for ref in _existing.document.account.source_refs {
 		if !list.Contains(_existingEvidence, ref) {_invalid: _|_}
 	}
+	for ref in _existing.document.account.delta.evidence_refs {
+		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: _|_}
+		if !list.Contains(_existingChangeEvidence, ref) {_invalid: _|_}
+	}
 	if _existing.document.observation.goal_candidate_ids != _expectedCandidates {_invalid: _|_}
-	if len(_existingUnknown) > 0 && _existing.document.observation.status != "unknown" {_invalid: _|_}
-	if len(_existingUnknown) == 0 && len(_existingOpen) > 0 && _existing.document.observation.status != "open" {_invalid: _|_}
-	if len(_existingUnknown) == 0 && len(_existingOpen) == 0 && _existing.document.observation.status != "aligned" {_invalid: _|_}
+	if _existing.document.account.lens_index != _expectedLensIndex {_invalid: _|_}
+	if len(_existingOpen) > 0 && _existing.document.observation.status != "open" {_invalid: _|_}
+	if len(_existingOpen) == 0 && _existing.document.observation.status != "aligned" {_invalid: _|_}
 	if _previous.value == null {
 		if _existing.document.account.revision != 0 {_invalid: _|_}
 		if _existing.document.observation.mode != "bootstrap" {_invalid: _|_}
+		if len(_existing.document.account.retired) != 0 {_invalid: _|_}
+		for item in _existing.document.account.items {
+			if item.change != "added" {_invalid: _|_}
+			if item.previous_item_id != null {_invalid: _|_}
+		}
 	}
 	if _previous.value != null {
 		if _existing.document.account.revision != _previous.value.document.account.revision+1 {_invalid: _|_}
 		if _existing.document.observation.mode != "iterate" {_invalid: _|_}
 		if _existing.document.account.subject != _previous.value.document.account.subject {_invalid: error("document subject must equal the previous Account subject for iterate")}
 		if _existing.document.account.boundary != _previous.value.document.account.boundary {_invalid: error("document boundary must equal the previous Account boundary for iterate")}
+		_previousIDs: [for item in _previous.value.document.account.items {item.item_id}]
+		_usedPrevious: list.Concat([
+			[for item in _existing.document.account.items if item.previous_item_id != null {item.previous_item_id}],
+			[for item in _existing.document.account.retired {item.previous_item_id}],
+		])
+		_usedPreviousUnique: list.UniqueItems(_usedPrevious) & true
+		if len(_usedPrevious) != len(_previousIDs) {_invalid: _|_}
+		for previousID in _previousIDs {
+			if !list.Contains(_usedPrevious, previousID) {_invalid: _|_}
+		}
+		for item in _existing.document.account.items {
+			if item.change == "added" && item.previous_item_id != null {_invalid: _|_}
+			if item.change != "added" && item.previous_item_id == null {_invalid: _|_}
+			if item.previous_item_id != null {
+				if !list.Contains(_previousIDs, item.previous_item_id) {_invalid: _|_}
+				if item.change == "retained" && item.item_id != item.previous_item_id {_invalid: _|_}
+				if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: _|_}
+			}
+		}
+		for retired in _existing.document.account.retired {
+			if !list.Contains(_previousIDs, retired.previous_item_id) {_invalid: _|_}
+		}
 	}
 }
 validate: _validateChecks & _existing
