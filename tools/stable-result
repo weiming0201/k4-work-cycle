@@ -230,6 +230,61 @@ def parse_bindings(words: list[str], null_names: list[str]) -> dict[str, dict[st
     return result
 
 
+def add_projected_log_bindings(
+    bindings: dict[str, dict[str, Any]],
+    words: list[str],
+    projection_contract: str | None,
+    projection_expression: str,
+    projection_binding_names: list[str],
+) -> None:
+    if not words:
+        return
+    if projection_contract is None:
+        raise Refusal("--projection-contract is required with --project-log-bind")
+    projection_bindings: dict[str, dict[str, Any]] = {}
+    for name in projection_binding_names:
+        if name not in bindings:
+            raise Refusal(f"projection binding is not available: {name}")
+        projection_bindings[name] = bindings[name]
+    for word in words:
+        if "=" not in word:
+            raise Refusal(f"projected log binding must be NAME=PATH: {word}")
+        name, raw_path = word.split("=", 1)
+        if not name or name in bindings:
+            raise Refusal(f"duplicate or empty binding name: {name!r}")
+        path = Path(raw_path)
+        try:
+            raw = path.read_bytes()
+        except OSError as error:
+            raise Refusal(f"cannot read projected log binding {name} {path}: {error}") from error
+        events = load_log_bytes(raw, f"projected log binding {name}")
+        generated = pre_document(
+            evaluate(
+                Path(projection_contract),
+                {"bindings": projection_bindings, "events": events},
+                projection_expression,
+            ),
+            projection_bindings,
+            projection_expression,
+        )
+        value = {
+            **generated,
+            "generated_unix_ms": time.time_ns() // 1_000_000,
+            "content_sha256": "",
+        }
+        value["content_sha256"] = document_content_sha256(value)
+        validate_document_envelope(value, f"projected log binding {name}")
+        raw_digest = digest(raw)
+        bindings[name] = {
+            "binding": {
+                "ref": f"{value['schema']}@jsonl#sha256={raw_digest}",
+                "sha256": raw_digest,
+                "content_sha256": raw_digest,
+            },
+            "value": value,
+        }
+
+
 def cue_binary() -> str:
     path = shutil.which("cue")
     if path is None:
@@ -329,6 +384,13 @@ def materialize(args: argparse.Namespace) -> dict[str, Any]:
     if not isinstance(candidate, dict):
         raise Refusal("semantic input must be an object")
     bindings = parse_bindings(args.bind, args.null_bind)
+    add_projected_log_bindings(
+        bindings,
+        args.project_log_bind,
+        args.projection_contract,
+        args.projection_expression,
+        args.projection_bind,
+    )
     generated = pre_document(
         evaluate(
             Path(args.contract),
@@ -484,18 +546,33 @@ def project(args: argparse.Namespace) -> dict[str, Any]:
 
 def validate(args: argparse.Namespace) -> dict[str, Any]:
     bindings = parse_bindings(args.bind, args.null_bind)
+    add_projected_log_bindings(
+        bindings,
+        args.project_log_bind,
+        args.projection_contract,
+        args.projection_expression,
+        args.projection_bind,
+    )
     if args.document is not None:
         path = Path(args.document)
         value = validate_document_envelope(
             load_json(path, "document"),
             "document",
         )
+        context: dict[str, Any] = {
+            "existing": value,
+            "bindings": bindings,
+        }
+        if args.source_log is not None:
+            source_log = Path(args.source_log)
+            try:
+                raw = source_log.read_bytes()
+            except OSError as error:
+                raise Refusal(f"cannot read source log {source_log}: {error}") from error
+            context["events"] = load_log_bytes(raw, str(source_log))
         checked = evaluate(
             Path(args.contract),
-            {
-                "existing": value,
-                "bindings": bindings,
-            },
+            context,
             args.expression,
         )
         if checked != value:
@@ -547,6 +624,10 @@ def parser() -> argparse.ArgumentParser:
     materialize_parser.add_argument("--input", required=True)
     materialize_parser.add_argument("--output", required=True)
     materialize_parser.add_argument("--expression", default="generate")
+    materialize_parser.add_argument("--project-log-bind", action="append", default=[])
+    materialize_parser.add_argument("--projection-contract")
+    materialize_parser.add_argument("--projection-expression", default="project")
+    materialize_parser.add_argument("--projection-bind", action="append", default=[])
     add_bindings(materialize_parser)
 
     append_parser = commands.add_parser("append")
@@ -566,6 +647,11 @@ def parser() -> argparse.ArgumentParser:
     target.add_argument("--document")
     target.add_argument("--log")
     validate_parser.add_argument("--expression", default="validate")
+    validate_parser.add_argument("--source-log")
+    validate_parser.add_argument("--project-log-bind", action="append", default=[])
+    validate_parser.add_argument("--projection-contract")
+    validate_parser.add_argument("--projection-expression", default="project")
+    validate_parser.add_argument("--projection-bind", action="append", default=[])
     add_bindings(validate_parser)
 
     return root

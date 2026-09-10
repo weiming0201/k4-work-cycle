@@ -39,7 +39,8 @@ Finish; the projection is only its current derived view.
 
 Run `scripts/append --help` for the public event contract. Append through the
 script with exact Goal and Plan bindings. Use `scripts/project` to create an
-absent derived view from the complete ledger.
+absent derived view from the complete ledger. Use `scripts/validate` to check
+the ledger or compare a projection with its exact source ledger.
 
 Do not hand-author, patch, reorder, truncate, or replace stable events.
 Ordinary use does not require reading the CUE contract or Tool source. Correct

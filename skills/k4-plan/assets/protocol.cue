@@ -235,6 +235,7 @@ _incomingIndices: [for currentIndex, current in _input.operations {
 for index, operation in _input.operations {
 	if list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0 {_invalid: _|_}
 	if !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0 {_invalid: _|_}
+	if len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
 	if len(operation.depends_on_indices) > 0 {
 		if operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
 		for dependency in operation.depends_on_indices {
@@ -255,9 +256,9 @@ _failForks: [for index, operation in _input.operations if len(operation.on_resul
 }]
 _operationForks: list.Concat([_passForks, _failForks])
 _forks: list.Concat([_startForks, _operationForks])
-_joins: [for index, operation in _input.operations if len(operation.depends_on_indices) > 1 {close({
+_joins: [for index, operation in _input.operations if len(_incomingIndices[index]) > 1 {close({
 	before_operation_id: _operationIDs[index]
-	predecessor_operation_ids: [for dependency in operation.depends_on_indices {_operationIDs[dependency]}]
+	predecessor_operation_ids: [for dependency in _incomingIndices[index] {_operationIDs[dependency]}]
 })
 }]
 _passEnds: [for index, operation in _input.operations if len(operation.on_result.pass.next_operation_indices) == 0 {
@@ -303,6 +304,7 @@ _generateChecks: {
 		}
 		if list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0 {_invalid: _|_}
 		if !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0 {_invalid: _|_}
+		if len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
 		if len(operation.depends_on_indices) > 0 {
 			if operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
 			for dependency in operation.depends_on_indices {
@@ -408,6 +410,7 @@ _existingIncomingIDs: [for currentIndex, current in _existing.document.operation
 for index, operation in _existing.document.operations {
 	if list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0 {_invalid: _|_}
 	if !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0 {_invalid: _|_}
+	if len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
 	if len(operation.depends_on) > 0 {
 		if operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
 		for dependency in operation.depends_on {
@@ -442,9 +445,9 @@ _existingFailForks: [for operation in _existing.document.operations if len(opera
 }]
 _existingOperationForks: list.Concat([_existingPassForks, _existingFailForks])
 _expectedForks: list.Concat([_existingStartForks, _existingOperationForks])
-_expectedJoins: [for operation in _existing.document.operations if len(operation.depends_on) > 1 {close({
+_expectedJoins: [for index, operation in _existing.document.operations if len(_existingIncomingIDs[index]) > 1 {close({
 	before_operation_id:       operation.operation_id
-	predecessor_operation_ids: operation.depends_on
+	predecessor_operation_ids: _existingIncomingIDs[index]
 })
 }]
 _existingPassEnds: [for operation in _existing.document.operations if len(operation.on_result.pass.next_operation_ids) == 0 {
@@ -485,6 +488,7 @@ _validateChecks: {
 		}
 		if list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0 {_invalid: _|_}
 		if !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0 {_invalid: _|_}
+		if len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
 		if len(operation.depends_on) > 0 {
 			if operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
 			for dependency in operation.depends_on {

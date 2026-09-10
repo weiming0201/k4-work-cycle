@@ -1,51 +1,104 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env python3
+"""Materialize Finish from the exact Run ledger and its verified projection."""
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-skill_dir=$(dirname -- "$script_dir")
-tool=${K4_STABLE_RESULT:-}
+from __future__ import annotations
 
-if [ "${1:-}" = "--help" ]; then
-    printf '%s\n' \
-        'Usage: materialize --input FILE --output FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE --bind run=FILE' \
-        '' \
-        'Settle one halted Run projection into the shared Account and report.' \
-        '' \
-        'Options:' \
-        '  --input FILE    JSON object with the semantic fields below' \
-        '  --output FILE   absent output path whose parent already exists' \
-        '  --bind previous_account=FILE  exact pre-Goal Observe Account' \
-        '  --bind goal=FILE              exact frozen Goal' \
-        '  --bind plan=FILE              exact executable Plan' \
-        '  --bind run=FILE               exact halted Run projection, including ledger head' \
-        '' \
-        'Semantic input:' \
-        '  subject, boundary, cutoff, source_refs, lenses, delta, items, retired' \
-        '  items[] include lens; lenses must equal the opening Account lenses' \
-        '  acceptance_results[]: {id, result, actual_refs, comparison_refs, evidence_refs, unknowns}' \
-        '  terminal_control_results[]: same fields, one per terminal control' \
-        '  result: pass | fail; unknowns are annotations, not result states' \
-        '  result_disposition: {state, statement, refs}' \
-        '  incomplete_deliverable: null for pass; nonempty for fail' \
-        '  run_log_ref: exact linear Run-ledger reference' \
-        '' \
-        'Output:' \
-        '  The stable Finish envelope stores the next Account and derived settlement report.' \
-        '' \
-        'Exit status: 0 on materialization; 1 without output on refusal.'
-    exit 0
-fi
+import os
+from pathlib import Path
+import shutil
+import sys
 
-if [ -z "$tool" ]; then tool=$(command -v stable-result || true); fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
-    tool="$skill_dir/../../tools/stable-result"
-fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
-    tool="$skill_dir/../../workspace/tools/stable-result"
-fi
-if [ -z "$tool" ]; then
-    echo "stable-result is not available" >&2
-    exit 1
-fi
 
-exec "$tool" --contract "$skill_dir/assets/protocol.cue" materialize "$@"
+HELP = """Usage: materialize --input FILE --output FILE --run-log FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE
+
+Settle one halted Run ledger into the shared Account and report.
+
+Options:
+  --input FILE    JSON object with the semantic fields below
+  --output FILE   absent output path whose parent already exists
+  --run-log FILE  exact append-only Run ledger; its projection is derived mechanically
+  --bind previous_account=FILE  exact pre-Goal Observe Account
+  --bind goal=FILE              exact frozen Goal
+  --bind plan=FILE              exact executable Plan
+
+Semantic input:
+  subject, boundary, cutoff, source_refs, lenses, delta, items, retired
+  items[] include lens; lenses must equal the opening Account lenses
+  acceptance_results[]: {id, result, actual_refs, comparison_refs, evidence_refs, unknowns}
+  terminal_control_results[]: same fields, one per terminal control
+  result: pass | fail; unknowns are annotations, not result states
+  result_disposition: {state, statement, refs}
+  incomplete_deliverable: null for pass; nonempty for fail
+
+Output:
+  The stable Finish envelope binds the exact Run ledger and stores the next
+  Account plus the derived settlement report.
+
+Exit status: 0 on materialization; 1 without output on refusal.
+"""
+
+
+def main() -> int:
+    if len(sys.argv) == 2 and sys.argv[1] == "--help":
+        print(HELP, end="")
+        return 0
+
+    script_dir = Path(__file__).resolve().parent
+    skill_dir = script_dir.parent
+    run_contract = skill_dir.parent / "k4-run" / "assets" / "protocol.cue"
+    tool = os.environ.get("K4_STABLE_RESULT") or shutil.which("stable-result")
+    if tool is None:
+        for candidate in (
+            skill_dir.parent.parent / "tools" / "stable-result",
+            skill_dir.parent.parent / "workspace" / "tools" / "stable-result",
+        ):
+            if candidate.is_file() and os.access(candidate, os.X_OK):
+                tool = str(candidate)
+                break
+    if tool is None:
+        print("stable-result is not available", file=sys.stderr)
+        return 1
+
+    forwarded: list[str] = []
+    run_log: str | None = None
+    index = 1
+    while index < len(sys.argv):
+        word = sys.argv[index]
+        if word == "--run-log":
+            if run_log is not None or index + 1 >= len(sys.argv):
+                print("--run-log requires exactly one FILE", file=sys.stderr)
+                return 1
+            run_log = sys.argv[index + 1]
+            index += 2
+            continue
+        if word == "--bind" and index + 1 < len(sys.argv) and sys.argv[index + 1].startswith("run="):
+            print("bind the Run ledger with --run-log, not --bind run=PROJECTION", file=sys.stderr)
+            return 1
+        forwarded.append(word)
+        index += 1
+
+    if run_log is None:
+        print("--run-log FILE is required", file=sys.stderr)
+        return 1
+
+    command = [
+        str(tool),
+        "--contract",
+        str(skill_dir / "assets" / "protocol.cue"),
+        "materialize",
+        *forwarded,
+        "--project-log-bind",
+        f"run={run_log}",
+        "--projection-contract",
+        str(run_contract),
+        "--projection-bind",
+        "goal",
+        "--projection-bind",
+        "plan",
+    ]
+    os.execv(str(tool), command)
+    return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

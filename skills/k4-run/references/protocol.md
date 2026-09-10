@@ -24,4 +24,5 @@ Goal or Plan.
 No event follows halt. `plan-complete` requires every activated branch to reach
 end. `blocked` and `cancelled` preserve exceptional stops. The projection does
 not judge Goal acceptance or terminal controls; those belong to Finish. Run
-`scripts/append --help` for exact event fields.
+`scripts/append --help` for exact event fields. A projection is revalidated only
+by rederiving it from its exact source ledger through `scripts/validate`.

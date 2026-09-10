@@ -1,7 +1,8 @@
 # Finish document protocol
 
 Finish materializes one closing Account plus a closure report for one exact
-halted attempt. It binds the opening Account, Goal, Plan, and Run projection.
+halted attempt. It binds the opening Account, Goal, Plan, and exact Run ledger;
+the Run projection used for settlement is derived mechanically from that ledger.
 
 The Account core is the same structured observation surface as Observe:
 subject, boundary, cutoff, sources, lenses, generated lens index, delta,
@@ -12,7 +13,7 @@ Closure is the stage report. It adds one pass/fail judgment for every Goal
 acceptance point and terminal control, result disposition, incomplete package,
 and exact journal reference. The Tool derives operation counts, actual and
 not-run operations, Findings, unknowns, emergency patches, halt, ledger head,
-and the attempt result from the bound Run projection. Unknown is an annotation,
+and the attempt result from the derived Run projection. Unknown is an annotation,
 not a third routing result.
 
 An attempt passes only when the Run reaches `plan-complete` and every acceptance

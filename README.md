@@ -40,9 +40,9 @@ stage-neutral; every Skill supplies its own CUE contract.
 ## Mechanical interface
 
 Skill-local scripts are the public entrypoints. Observe, Goal, Plan, and Finish
-materialize immutable documents. Run appends one event and projects its ledger.
-Every stable JSON or JSONL output is Tool-generated; semantic input remains a
-temporary work product.
+materialize immutable documents. Run appends one event, projects its ledger,
+and validates either the ledger or its derived projection. Every stable JSON or
+JSONL output is Tool-generated; semantic input remains a temporary work product.
 
 Run the source conformance suite from the Resource root:
 

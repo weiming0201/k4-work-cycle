@@ -1,0 +1,52 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+skill_dir=$(dirname -- "$script_dir")
+tool=${K4_STABLE_RESULT:-}
+
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage:' \
+        '  validate --log FILE --bind goal=FILE --bind plan=FILE' \
+        '  validate --document FILE --source-log FILE --bind goal=FILE --bind plan=FILE' \
+        '' \
+        'Validate a Run ledger, or rederive and compare one Run projection.' \
+        '' \
+        'Options:' \
+        '  --log FILE         exact append-only Run ledger' \
+        '  --document FILE    existing Run projection to compare' \
+        '  --source-log FILE  source ledger required with --document' \
+        '  --bind goal=FILE   exact frozen Goal' \
+        '  --bind plan=FILE   exact executable Plan' \
+        '' \
+        'Exit status: 0 when the ledger is valid or the projection exactly matches it; 1 otherwise.'
+    exit 0
+fi
+
+if [ -z "$tool" ]; then tool=$(command -v stable-result || true); fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
+    tool="$skill_dir/../../tools/stable-result"
+fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
+    tool="$skill_dir/../../workspace/tools/stable-result"
+fi
+if [ -z "$tool" ]; then
+    echo "stable-result is not available" >&2
+    exit 1
+fi
+
+mode=
+for word in "$@"; do
+    case "$word" in
+        --document) mode=document ;;
+        --log) mode=log ;;
+        --expression) echo "--expression is fixed by this interface" >&2; exit 1 ;;
+    esac
+done
+
+case "$mode" in
+    document) exec "$tool" --contract "$skill_dir/assets/protocol.cue" validate "$@" --expression validate ;;
+    log) exec "$tool" --contract "$skill_dir/assets/protocol.cue" validate "$@" --expression validate_log ;;
+    *) echo "exactly one of --log or --document is required" >&2; exit 1 ;;
+esac

@@ -47,12 +47,12 @@ def manifest_input(root: Path) -> dict[str, Any]:
         "k4-observe": ["skills/k4-observe/scripts/materialize"],
         "k4-goal": ["skills/k4-goal/scripts/materialize"],
         "k4-plan": ["skills/k4-plan/scripts/materialize"],
-        "k4-run": ["skills/k4-run/scripts/append", "skills/k4-run/scripts/project"],
+        "k4-run": ["skills/k4-run/scripts/append", "skills/k4-run/scripts/project", "skills/k4-run/scripts/validate"],
         "k4-finish": ["skills/k4-finish/scripts/materialize"],
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.4.0",
+        "extension_version": "0.4.1",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",
@@ -151,6 +151,7 @@ class Harness:
         semantic: dict[str, Any],
         output: Path,
         bindings: list[tuple[str, Path | None]],
+        run_log: Path | None = None,
     ) -> None:
         source = self.work / f"{label.replace(' ', '-')}-input.json"
         write_json(source, semantic)
@@ -160,6 +161,8 @@ class Harness:
                 words.extend(("--null-bind", name))
             else:
                 words.extend(("--bind", f"{name}={value}"))
+        if run_log is not None:
+            words.extend(("--run-log", str(run_log)))
         self.ok(label, *words)
         validate = [
             str(self.tool),
@@ -174,6 +177,19 @@ class Harness:
                 validate.extend(("--null-bind", name))
             else:
                 validate.extend(("--bind", f"{name}={value}"))
+        if run_log is not None:
+            validate.extend(
+                (
+                    "--project-log-bind",
+                    f"run={run_log}",
+                    "--projection-contract",
+                    str(self.root / "skills" / "k4-run" / "assets" / "protocol.cue"),
+                    "--projection-bind",
+                    "goal",
+                    "--projection-bind",
+                    "plan",
+                )
+            )
         self.ok(f"validate {label}", *validate)
 
     def append(self, label: str, event: dict[str, Any], log: Path, goal: Path, plan: Path) -> None:
@@ -519,14 +535,14 @@ class Harness:
             ],
             "result_disposition": {"state": "placed", "statement": "result remains in fixture", "refs": ["actual://result"]},
             "incomplete_deliverable": None,
-            "run_log_ref": "run://ledger",
         }
         self.materialize(
             "Finish",
             "k4-finish",
             finish_input,
             finish,
-            [("previous_account", observe0), ("goal", goal), ("plan", plan), ("run", projection)],
+            [("previous_account", observe0), ("goal", goal), ("plan", plan)],
+            run_log=log,
         )
         closure = read_json(finish)["document"]["closure"]
         if closure["attempt_result"] != "pass" or closure["operation_summary"] != {

@@ -176,7 +176,7 @@ context: _
 	document: {
 		status: "frozen"
 		acceptance_points: [{point_id: #Text, ...}, ...]
-		control_contracts: [{control_id: #Text, check_timing: "invariant" | "terminal", ...}, ...]
+		control_contracts: [...{control_id: #Text, check_timing: "invariant" | "terminal", ...}]
 		...
 	}
 }
@@ -207,9 +207,9 @@ context: _
 			...
 		})
 		operations: [{operation_id: #OperationID, result: #Result | "not-run", ...}, ...]
-		operation_results: [{operation_id: #OperationID, result: #Result, findings: [...#Finding], unknowns: [...#Unknown], ...}, ...]
-		emergency_patches: [{operation_id: #OperationID, findings: [...#Finding], unknowns: [...#Unknown], ...}, ...]
-		invariant_control_results: [{control_id: #Text, result: #Result, ...}, ...]
+		operation_results: [...{operation_id: #OperationID, result: #Result, findings: [...#Finding], unknowns: [...#Unknown], ...}]
+		emergency_patches: [...{operation_id: #OperationID, findings: [...#Finding], unknowns: [...#Unknown], ...}]
+		invariant_control_results: [...{control_id: #Text, result: #Result, ...}]
 		...
 	}
 }
@@ -230,7 +230,6 @@ context: _
 	terminal_control_results: [...#JudgmentInput]
 	result_disposition:     #Disposition
 	incomplete_deliverable: null | #Incomplete
-	run_log_ref:            #Text
 })
 
 _input: #Input & context.input
@@ -489,7 +488,7 @@ _document: #Document & {
 		}
 		result_disposition:     _input.result_disposition
 		incomplete_deliverable: _input.incomplete_deliverable
-		run_log_ref:            _input.run_log_ref
+		run_log_ref:            _run.binding.ref
 		run_head_event_sha256:  _run.value.document.ledger_head_event_sha256
 	}
 }

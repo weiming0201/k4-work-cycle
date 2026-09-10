@@ -10,9 +10,9 @@ ledger that Observe opened.
 
 ## Boundary
 
-- Bind the exact opening Account, Goal, Plan, and halted Run projection. Treat
-  the Run ledger as the primary process evidence and follow its evidence
-  references only when the settlement needs more detail.
+- Bind the exact opening Account, Goal, Plan, and halted Run ledger. Its current
+  projection is derived mechanically; follow recorded evidence references only
+  when the settlement needs more detail.
 - Preserve the Account subject, boundary, and observation lenses. Account for
   every predecessor item as retained, changed, or retired; new facts may be
   added only inside an already declared lens.
@@ -38,7 +38,7 @@ stores.
 ## Materialize
 
 Run `scripts/materialize --help`, supply temporary semantic JSON, and bind the
-exact opening Account, Goal, Plan, and halted Run projection. The deterministic
+exact opening Account, Goal, Plan, and halted Run ledger. The deterministic
 Tool creates the stable Finish output. Do not hand-author or patch stable JSON.
 
 Ordinary use does not require reading the CUE contract or Tool source. If the

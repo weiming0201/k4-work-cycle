@@ -48,9 +48,9 @@ and failure-before-write. CUE owns the meaning of accepted data.
   operation DAG, including its selection rationale and topology projection.
 - Run accepts one exact Goal, Plan, existing ledger, and candidate event. It
   validates graph activation and appends only operation, patch, or halt facts.
-- Finish accepts the exact opening Account, Goal, Plan, and halted Run
-  projection. It derives the settlement report and materializes the next
-  Account.
+- Finish accepts the exact opening Account, Goal, Plan, and halted Run ledger.
+  The Tool derives its Run projection, then derives the settlement report and
+  materializes the next Account.
 
 Every binding includes the referenced schema, raw-file digest, and semantic
 content digest. It proves the exact consumed bytes, not their truth or a
@@ -91,9 +91,10 @@ fixed to mainline resumption. The projection retains every Plan operation as
 ## 6. Stable and temporary state
 
 Temporary semantic inputs may be edited during formation. Observe, Goal, Plan,
-Finish, and Run projections are immutable materialized documents. Run events
-are immutable append-only facts. Stable structured outputs are created only by
-the Tool and are never hand-patched.
+Finish, and Run projections are immutable materialized documents. A Run
+projection is valid only relative to its exact source ledger. Run events are
+immutable append-only facts. Stable structured outputs are created only by the
+Tool and are never hand-patched.
 
 Semantic content identity excludes generated time but includes exact bindings.
 File identity includes all canonical bytes. A rejected input remains temporary

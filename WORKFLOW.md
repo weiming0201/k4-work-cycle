@@ -126,8 +126,8 @@ the final Goal, adopt output, publish, or choose the next Goal.
 
 ## 5. Finish: settle the ledger
 
-Finish binds the exact opening Account, Goal, Plan, and halted Run. The Run
-ledger is its primary process evidence. Finish may follow recorded evidence
+Finish binds the exact opening Account, Goal, Plan, and halted Run ledger. The
+Tool derives its current projection from those exact bytes. Finish may follow recorded evidence
 references when settlement needs detail, but it does not repair the attempt or
 invent missing events.
 

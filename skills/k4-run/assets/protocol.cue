@@ -425,8 +425,9 @@ _patchProjection: [for envelope in _patchEvents {close({
 	unknowns:                envelope.event.unknowns
 })
 }]
-_invariantResults: [for control in _goal.value.document.control_contracts if control.check_timing == "invariant" {
-	_nested: [for envelope in _operationEvents {
+_invariantObservations: [for control in _goal.value.document.control_contracts if control.check_timing == "invariant" {
+	control_id: control.control_id
+	observations: list.Concat([for envelope in _operationEvents {
 		[for check in envelope.event.invariant_checks if check.control_id == control.control_id {
 			close({
 				event_sequence:  envelope.sequence
@@ -438,18 +439,17 @@ _invariantResults: [for control in _goal.value.document.control_contracts if con
 				evidence_refs:   check.evidence_refs
 			})
 		}]
-	}]
-	_observations: list.Concat(_nested)
-	if len(_observations) > 0 {
-		_failures: [for observation in _observations if observation.result == "fail" {observation}]
-		_result: *"pass" | "fail"
-		if len(_failures) > 0 {_result: "fail"}
-		close({
-			control_id:   control.control_id
-			result:       _result
-			observations: _observations
-		})
-	}
+	}])
+}]
+_invariantResults: [for control in _invariantObservations if len(control.observations) > 0 {
+	_failures: [for observation in control.observations if observation.result == "fail" {observation}]
+	_result: *"pass" | "fail"
+	if len(_failures) > 0 {_result: "fail"}
+	close({
+		control_id:   control.control_id
+		result:       _result
+		observations: control.observations
+	})
 }]
 _operationStates: [for result in _operationProjection {result.result}]
 _operationFailures: [for state in _operationStates if state == "fail" {state}]
@@ -503,5 +503,19 @@ project: _planChecks & _publicLedgerChecks & close({
 		ledger_head_event_sha256:  _ledgerHead
 	})
 })
+
+_existingProjection: context.existing & {
+	schema:            "k4-run-projection/v4"
+	generated_unix_ms: uint
+	content_sha256:    #Digest
+	bindings:          _bindings
+	document:          _
+}
+_expectedProjection: project
+validate: _planChecks & _publicLedgerChecks & _existingProjection & {
+	schema:   _expectedProjection.schema
+	bindings: _expectedProjection.bindings
+	document: _expectedProjection.document
+}
 
 validate_log: _planChecks & _publicLedgerChecks & _events

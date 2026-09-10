@@ -150,9 +150,12 @@ for id in _input.observe_item_ids {
 	if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 }
 _generateChecks: {
+	_pointIDsUnique:   list.UniqueItems(_pointIDs) & true
+	_controlIDsUnique: list.UniqueItems(_controlIDs) & true
 	for id in _input.observe_item_ids {
 		if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 	}
+	if _status == "frozen" && len(_points) == 0 {_invalid: _|_}
 }
 
 _points: [for point in _input.acceptance_points {
@@ -165,7 +168,6 @@ _points: [for point in _input.acceptance_points {
 	})
 }]
 _pointIDs: [for point in _points {point.point_id}]
-_pointIDsUnique: list.UniqueItems(_pointIDs) & true
 
 _controls: [for control in _input.control_contracts {
 	close({
@@ -182,11 +184,9 @@ _controls: [for control in _input.control_contracts {
 	})
 }]
 _controlIDs: [for control in _controls {control.control_id}]
-_controlIDsUnique: list.UniqueItems(_controlIDs) & true
 
 _status: *"frozen" | "not-frozen"
 if len(_input.blockers) > 0 {_status: "not-frozen"}
-if _status == "frozen" && len(_points) == 0 {_invalid: _|_}
 
 _document: #Document & {
 	observe_item_ids:    _input.observe_item_ids
@@ -219,12 +219,22 @@ for id in _existing.document.observe_item_ids {
 	if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 }
 _validateChecks: {
+	_pointIDsUnique:   list.UniqueItems(_existingPointIDs) & true
+	_controlIDsUnique: list.UniqueItems(_existingControlIDs) & true
 	for id in _existing.document.observe_item_ids {
 		if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 	}
+	for index, point in _existing.document.acceptance_points {
+		if point.point_id != _expectedExistingPointIDs[index] {_invalid: _|_}
+	}
+	for index, control in _existing.document.control_contracts {
+		if control.control_id != _expectedExistingControlIDs[index] {_invalid: _|_}
+	}
+	if len(_existing.document.blockers) > 0 && _existing.document.status != "not-frozen" {_invalid: _|_}
+	if len(_existing.document.blockers) == 0 && _existing.document.status != "frozen" {_invalid: _|_}
+	if _existing.document.status == "frozen" && len(_existing.document.acceptance_points) == 0 {_invalid: _|_}
 }
 _existingPointIDs: [for point in _existing.document.acceptance_points {point.point_id}]
-_existingPointIDsUnique: list.UniqueItems(_existingPointIDs) & true
 _expectedExistingPointIDs: [for point in _existing.document.acceptance_points {
 	"point-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(close({
 		statement:         point.statement
@@ -233,11 +243,7 @@ _expectedExistingPointIDs: [for point in _existing.document.acceptance_points {
 		acceptance:        point.acceptance
 	})))), 0, 16))"
 }]
-for index, point in _existing.document.acceptance_points {
-	if point.point_id != _expectedExistingPointIDs[index] {_invalid: _|_}
-}
 _existingControlIDs: [for control in _existing.document.control_contracts {control.control_id}]
-_existingControlIDsUnique: list.UniqueItems(_existingControlIDs) & true
 _expectedExistingControlIDs: [for control in _existing.document.control_contracts {
 	"control-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(close({
 		statement:           control.statement
@@ -251,11 +257,4 @@ _expectedExistingControlIDs: [for control in _existing.document.control_contract
 		check_timing:        control.check_timing
 	})))), 0, 16))"
 }]
-for index, control in _existing.document.control_contracts {
-	if control.control_id != _expectedExistingControlIDs[index] {_invalid: _|_}
-}
-if len(_existing.document.blockers) > 0 && _existing.document.status != "not-frozen" {_invalid: _|_}
-if len(_existing.document.blockers) == 0 && _existing.document.status != "frozen" {_invalid: _|_}
-if _existing.document.status == "frozen" && len(_existing.document.acceptance_points) == 0 {_invalid: _|_}
-
 validate: _validateChecks & _existing
