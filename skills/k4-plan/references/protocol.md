@@ -1,29 +1,18 @@
 # Plan document protocol
 
-Plan is one immutable operation DAG for one exact Goal.
+Plan is one immutable operation DAG for one exact Goal. Temporary input states
+the falsifiable difference, selected route with supporting and counter
+references, operations, optional guarded parallel groups, blockers, and
+unknowns.
 
-The temporary semantic input contains:
+Each operation carries earlier dependency indices, Goal point and control
+identities served, one Goal-authorized tool, executor, complete read/write
+positions, permission and resource references, maximum effects, checks,
+idempotency, retry ceiling, and recovery. `none:` explicitly marks an empty
+boundary.
 
-- one falsifiable `difference` and selected `route` with supporting and
-  counter references;
-- `operations`, where `depends_on_indices` names earlier array positions;
-- for each operation: Goal point and control IDs, one Goal-authorized
-  `tool_ref`, responsible executor, complete `read_refs` and `write_refs`,
-  permission and resource references, maximum side effects, pre- and
-  post-checks, idempotency, retry ceiling, and recovery;
-- optional `parallel_groups` naming operation indices, a reason, and concrete
-  guards;
-- explicit blockers and unknowns.
-
-Use a literal explanatory reference such as `none:no-write` when an operation
-has no write position; an empty list is not an explicit boundary.
-
-The contract replaces indices with generated operation identities and derives
-Goal acceptance and control coverage. An executable Plan has at least one
-operation, covers every Goal point and control, uses only Goal-authorized
-Tools, has no forward or cyclic dependency, and never places dependency-related
-operations in one parallel group.
-
-Nonempty blockers yield `not-executable`; otherwise nonempty unknowns yield
-`unknown`; otherwise the Plan is `executable`. Actual execution and results
-are not part of this document.
+The contract generates operation identities and coverage. An executable Plan
+has operations, covers every Goal point and control, uses only available tools,
+has no forward or cyclic dependency, and places no dependency-related nodes in
+one parallel group. It contains no actual execution result. Run public
+`--help` for exact field names.

@@ -1,44 +1,20 @@
 # Run event and projection protocol
 
-Run is an append-only event ledger for one exact Goal and Plan.
+Run is an append-only execution ledger for one exact Goal and Plan. A temporary
+event is either:
 
-Each temporary input is exactly one event:
+- `operation-result`: one eligible Plan operation's result, outputs, evidence,
+  trace, every mapped invariant-control observation, and deferred issues; or
+- `halt`: actual stop position, trigger, budget/effect evidence, evidence, and
+  resume reference when one exists.
 
-- `operation-result`: one Plan operation, result `pass`, `Finding`, or
-  `unknown`, eligibility, outputs, evidence, trace, and one check for every
-  invariant Goal control mapped to that operation, plus every potential
-  unresolved issue observed during the increment;
-- `acceptance-result`: one Goal point, actual value, comparison, evidence, and
-  bounded result;
-- `control-result`: one terminal-timed Goal control with actual value, trace,
-  comparison, evidence, and bounded result;
-- `stop`: actual stop state, budget and side-effect evidence, and a null
-  resume reference only for completion.
+An operation is appended once and only after dependencies pass. A passing
+operation has eligibility, outputs, evidence, trace, and passing invariant
+observations. Deferred issues are Finding or unknown statements with evidence;
+they cannot trigger unplanned work.
 
-`not-run` is never appended as an event. It is the projection of an absent
-operation or judgment.
-
-An operation result may be appended only once and only after every dependency
-has a prior `pass` event. A `pass` operation has eligibility, output,
-evidence, and trace references. Every invariant control mapped to an attempted
-operation has an embedded check; a non-pass check prevents the operation from
-passing.
-
-Every `operation-result` contains `deferred_issues`, including an explicit
-empty list when none were observed. Each entry records only `Finding` or
-`unknown`, its statement, and evidence references. Run must not investigate,
-repair, prioritize, route, or act on those issues; a later Align consumes them
-as evidence. An issue that proves the current operation drifted prevents that
-operation from passing. An out-of-scope issue may be deferred without changing
-an otherwise evidenced result.
-
-Acceptance may pass only after every mapped operation has passed. A terminal
-control may be recorded only for a terminal-timed Goal control. Every entity
-has at most one final result event. No event follows `stop`.
-
-The projection lists every Plan operation, Goal point, and Goal control,
-supplying `not-run` for missing entries. It aggregates repeated invariant
-checks without discarding their observations. Its result is `Finding` when
-any result is a Finding, otherwise `unknown` while any result is unknown or
-not run, otherwise `pass`. `pass` and `stop_state=completed` coincide.
-Every other stop state has a nonempty resume reference.
+No event follows halt. The projection supplies `not-run` for absent Plan
+operations and reports the observed execution position. It does not contain
+Goal acceptance judgments, terminal-control judgments, or overall completion.
+Those belong to Finish. Run public `--help` for exact event fields and command
+syntax.

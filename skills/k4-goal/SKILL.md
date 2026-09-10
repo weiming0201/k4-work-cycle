@@ -1,6 +1,6 @@
 ---
 name: k4-goal
-description: Freeze one exact Align selection into a single-use contract for the current baseline, predicted terminal state, audit points, available tools, authority, resources, controls, and stop conditions. Use before planning a goal-scale attempt; do not choose operations or execute work.
+description: Freeze one exact Observe Account selection into a single-use contract for terminal audit points, tools, authority, resources, controls, and stop conditions. Use before planning a goal-scale attempt; do not choose operations or execute work.
 ---
 
 # K4 Goal
@@ -10,52 +10,36 @@ state will be judged.
 
 ## Boundary
 
-- First locate one exact stable Align. If none exists or selection is
-  ambiguous, stop and route to `k4-align`; do not draft a Goal.
-- Bind one exact Align and select only its `goal-candidate` items.
-- Freeze the current baseline, predicted terminal state, evidence cutoff,
-  acceptance points, bounded judges, available tools, authority, resources,
-  budget, maximum effects, controls, and all stop outcomes.
-- Keep acceptance about the resulting state and control about execution
+- Require one exact current Observe Account; otherwise return to `k4-observe`.
+- Select only explicit `goal-candidate` items from that Account.
+- Freeze baseline, predicted terminal state, cutoff, acceptance, bounded judges,
+  tools, authority, resources, budget, maximum effects, controls, four stop
+  outcomes, and incomplete deliverable.
+- Acceptance describes the resulting state. Controls describe bounded execution
   variables. Neither is an operation.
-- Do not choose an implementation route, form a DAG, execute work, admit
-  post-cutoff evidence, or revise a frozen Goal.
+- Do not choose a route, form a DAG, execute work, admit post-cutoff evidence,
+  or revise a frozen Goal.
 
 ## Form the semantic input
 
-Select the exact Goal-candidate item IDs from the bound Align. State the
-objective, target, source and baseline references, evidence cutoff, scope,
-non-goals, blockers, and unknowns.
+State selected item identities, objective, target, baseline and source
+references, cutoff, scope, non-goals, blockers, and unknowns. Each acceptance
+point states observable, conditions, window, expected value, falsifier,
+sampling and comparison, required evidence, and bounded judge. Each control
+states the controlled variable, allowed domain, forbidden drift, required
+trace and evidence, check method, invariant or terminal timing, bounded judge,
+and non-pass response.
 
-For each acceptance point state what is observable, the conditions and window,
-the expected value, what would falsify it, how evidence is sampled and
-compared, the required evidence, and a bounded judge. A judge is self,
-independent agent, script, or human; its kind never expands its claim limit.
-
-Separately state every execution control: controlled variable, allowed domain,
-forbidden drift, required trace and evidence, check method, invariant or
-terminal timing, bounded judge, and non-pass response.
-
-Freeze the execution envelope: authorization and its claim limit, available
-Tools, resources, budget, maximum effects, distinct completed, paused, failed,
-and cancelled stops, and the incomplete deliverable. These are limits on a
-later attempt, not operations.
+The execution envelope states authorization and claim limit, available tools,
+resources, budget, maximum effects, distinct completed/paused/failed/cancelled
+conditions, and incomplete deliverable.
 
 ## Materialize
 
-Before authoring the temporary input, run `scripts/materialize --help` and use its output as the only field vocabulary.
+Run `scripts/materialize --help` before authoring input. Give temporary semantic
+JSON to the script and bind the exact Observe Account. The deterministic Tool
+creates an absent stable Goal. Any semantic change requires a new Goal.
 
-Write only a temporary semantic JSON input, then invoke:
-
-```text
-scripts/materialize --input <semantic-input.json> --output <absent-goal.json> --bind align=<align.json>
-```
-
-The script calls the shared deterministic Tool with this Skill's CUE contract.
-Any semantic change requires a new output file. Do not hand-author or patch the
-stable Goal.
-
-Do not read `assets/protocol.cue`, the shared Tool, or other implementation
-source before or during normal use. If materialization refuses the input,
-correct the stated semantic omission or contradiction from its error and this
-Skill; do not reverse-engineer the mechanical contract.
+Do not hand-author or patch stable JSON. Ordinary use does not require reading
+the CUE contract or Tool source. Correct named public omissions or
+contradictions; do not bypass the contract.

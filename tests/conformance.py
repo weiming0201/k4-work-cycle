@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Established K4 Work Cycle complete path and refusal cases."""
+"""Frozen K4 Work Cycle lifecycle and refusal meanings."""
 
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
 import os
@@ -15,6 +16,7 @@ from typing import Any
 
 
 ROOT = Path(__file__).resolve().parents[1]
+SKILL_NAMES = ("k4-observe", "k4-goal", "k4-plan", "k4-run", "k4-finish")
 
 
 def canonical_bytes(value: Any) -> bytes:
@@ -39,23 +41,131 @@ def refresh_document_digest(value: dict[str, Any]) -> None:
     ).hexdigest()
 
 
+def published_files(root: Path) -> list[Path]:
+    ignored_parts = {".git", "__pycache__"}
+    files = []
+    for path in root.rglob("*"):
+        relative = path.relative_to(root)
+        if not path.is_file() or any(part in ignored_parts for part in relative.parts):
+            continue
+        if relative.as_posix() == "manifest.json":
+            continue
+        files.append(relative)
+    return sorted(files, key=lambda item: item.as_posix())
+
+
+def manifest_input(root: Path) -> dict[str, Any]:
+    entrypoints = {
+        "k4-observe": ["skills/k4-observe/scripts/materialize"],
+        "k4-goal": ["skills/k4-goal/scripts/materialize"],
+        "k4-plan": ["skills/k4-plan/scripts/materialize"],
+        "k4-run": [
+            "skills/k4-run/scripts/append",
+            "skills/k4-run/scripts/project",
+        ],
+        "k4-finish": ["skills/k4-finish/scripts/materialize"],
+    }
+    return {
+        "extension_id": "k4-work-cycle",
+        "extension_version": "0.3.0",
+        "semantic_entry": "WORKFLOW.md",
+        "cue_version": "v0.17.1",
+        "shared_tool": "tools/stable-result",
+        "skills": [
+            {
+                "name": name,
+                "path": f"skills/{name}",
+                "protocol": f"skills/{name}/assets/protocol.cue",
+                "entrypoints": entrypoints[name],
+            }
+            for name in SKILL_NAMES
+        ],
+        "files": [
+            {
+                "path": relative.as_posix(),
+                "sha256": hashlib.sha256((root / relative).read_bytes()).hexdigest(),
+            }
+            for relative in published_files(root)
+        ],
+    }
+
+
+def generate_manifest(root: Path) -> None:
+    tool = root / "tools" / "stable-result"
+    contract = root / "manifest.cue"
+    with tempfile.TemporaryDirectory(
+        prefix="k4-work-cycle-manifest-", dir=root.parent
+    ) as directory:
+        temporary = Path(directory)
+        semantic_input = temporary / "manifest-input.json"
+        candidate = temporary / "manifest.json"
+        write_json(semantic_input, manifest_input(root))
+        process = subprocess.run(
+            [
+                str(tool),
+                "--contract",
+                str(contract),
+                "materialize",
+                "--input",
+                str(semantic_input),
+                "--output",
+                str(candidate),
+            ],
+            cwd=root,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        if process.returncode != 0:
+            raise AssertionError(
+                f"manifest generation failed\nstdout={process.stdout}\nstderr={process.stderr}"
+            )
+        os.replace(candidate, root / "manifest.json")
+
+
+def validate_manifest(root: Path) -> None:
+    value = read_json(root / "manifest.json")
+    expected = manifest_input(root)
+    if value["document"] != expected:
+        raise AssertionError("manifest document does not match current published source")
+    process = subprocess.run(
+        [
+            str(root / "tools" / "stable-result"),
+            "--contract",
+            str(root / "manifest.cue"),
+            "validate",
+            "--document",
+            str(root / "manifest.json"),
+        ],
+        cwd=root,
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if process.returncode != 0:
+        raise AssertionError(
+            f"manifest validation failed\nstdout={process.stdout}\nstderr={process.stderr}"
+        )
+
+
 class Harness:
     def __init__(self, extension: Path, work: Path) -> None:
         self.extension = extension
         self.work = work
         self.tool = extension / "tools" / "stable-result"
-        self.align_script = extension / "skills" / "k4-align" / "scripts" / "materialize"
-        self.goal_script = extension / "skills" / "k4-goal" / "scripts" / "materialize"
-        self.plan_script = extension / "skills" / "k4-plan" / "scripts" / "materialize"
+        self.observe = extension / "skills" / "k4-observe" / "scripts" / "materialize"
+        self.goal = extension / "skills" / "k4-goal" / "scripts" / "materialize"
+        self.plan = extension / "skills" / "k4-plan" / "scripts" / "materialize"
         self.run_append = extension / "skills" / "k4-run" / "scripts" / "append"
         self.run_project = extension / "skills" / "k4-run" / "scripts" / "project"
+        self.finish = extension / "skills" / "k4-finish" / "scripts" / "materialize"
         self.contracts = {
             name: extension / "skills" / name / "assets" / "protocol.cue"
-            for name in ("k4-align", "k4-goal", "k4-plan", "k4-run")
+            for name in SKILL_NAMES
         }
         self.environment = dict(os.environ)
         self.environment["K4_STABLE_RESULT"] = str(self.tool)
-        self.passed = 0
+        self.passed: list[str] = []
 
     def invoke(self, *words: str) -> subprocess.CompletedProcess[str]:
         return subprocess.run(
@@ -67,27 +177,36 @@ class Harness:
             check=False,
         )
 
-    def expect_ok(self, label: str, *words: str) -> None:
+    def expect_ok(self, label: str, *words: str) -> subprocess.CompletedProcess[str]:
         result = self.invoke(*words)
         if result.returncode != 0:
             raise AssertionError(
                 f"{label}: expected success\nstdout={result.stdout}\nstderr={result.stderr}"
             )
+        return result
 
-    def expect_refusal(self, label: str, *words: str) -> None:
+    def expect_refusal(
+        self, label: str, *words: str, contains: tuple[str, ...] = ()
+    ) -> None:
         result = self.invoke(*words)
         if result.returncode == 0:
             raise AssertionError(
                 f"{label}: expected refusal\nstdout={result.stdout}\nstderr={result.stderr}"
             )
-        self.passed += 1
-        print(f"PASS refusal: {label}")
+        combined = result.stdout + result.stderr
+        missing = [needle for needle in contains if needle not in combined]
+        if missing:
+            raise AssertionError(
+                f"{label}: refusal missing {missing!r}\nstdout={result.stdout}\nstderr={result.stderr}"
+            )
+        self.record(label)
+
+    def record(self, label: str) -> None:
+        self.passed.append(label)
+        print(f"PASS {label}")
 
     def validate_document(
-        self,
-        protocol: str,
-        document: Path,
-        *binding_words: str,
+        self, protocol: str, document: Path, *binding_words: str
     ) -> None:
         self.expect_ok(
             f"validate {protocol}",
@@ -100,17 +219,78 @@ class Harness:
             *binding_words,
         )
 
+    def observe_input(
+        self,
+        *,
+        mode: str,
+        subject: str,
+        boundary: str,
+        source: str,
+        statement: str,
+        state: str,
+        route: str,
+        change: str,
+        previous_item_id: str | None,
+    ) -> dict[str, Any]:
+        return {
+            "mode": mode,
+            "subject": subject,
+            "boundary": boundary,
+            "cutoff": f"cutoff for {source}",
+            "source_refs": [source],
+            "delta": {"summary": f"delta from {source}", "evidence_refs": [source]},
+            "items": [
+                {
+                    "change": change,
+                    "previous_item_id": previous_item_id,
+                    "change_reason": f"{change} from {source}",
+                    "epistemic_kind": "fact",
+                    "state": state,
+                    "statement": statement,
+                    "evidence_refs": [source],
+                    "route": route,
+                    "route_ref": None,
+                }
+            ],
+            "retired": [],
+        }
+
+    def materialize_observe(
+        self,
+        label: str,
+        semantic: dict[str, Any],
+        input_path: Path,
+        output: Path,
+        previous: Path | None = None,
+    ) -> None:
+        write_json(input_path, semantic)
+        binding = (
+            ("--null-bind", "previous_account")
+            if previous is None
+            else ("--bind", f"previous_account={previous}")
+        )
+        self.expect_ok(
+            label,
+            str(self.observe),
+            "--input",
+            str(input_path),
+            "--output",
+            str(output),
+            *binding,
+        )
+        self.validate_document("k4-observe", output, *binding)
+
     def operation(
         self,
         dependencies: list[int],
         point_id: str,
-        control_id: str,
+        control_ids: list[str],
         tool_ref: str,
     ) -> dict[str, Any]:
         return {
             "depends_on_indices": dependencies,
             "satisfies": [point_id],
-            "controlled_by": [control_id],
+            "controlled_by": control_ids,
             "tool_ref": tool_ref,
             "responsible_ref": "executor://isolated-test",
             "read_refs": ["input://fixture"],
@@ -135,14 +315,18 @@ class Harness:
             "evidence_refs": ["evidence://control-pass"],
         }
 
-    def operation_event(self, operation_id: str, control_id: str) -> dict[str, Any]:
+    def operation_event(
+        self, operation_id: str, control_id: str, result: str = "pass"
+    ) -> dict[str, Any]:
         return {
             "kind": "operation-result",
             "operation_id": operation_id,
-            "result": "pass",
-            "eligibility_refs": ["eligibility://pass"],
-            "actual_output_refs": ["actual://fixture-output"],
-            "evidence_refs": ["evidence://operation-pass"],
+            "result": result,
+            "eligibility_refs": ["eligibility://checked"],
+            "actual_output_refs": (
+                ["actual://fixture-output"] if result == "pass" else []
+            ),
+            "evidence_refs": [f"evidence://operation-{result}"],
             "trace_refs": ["trace://operation"],
             "invariant_checks": [self.invariant_check(control_id)],
             "deferred_issues": [],
@@ -175,82 +359,211 @@ class Harness:
         else:
             self.expect_refusal(label, *command)
 
-    def run(self) -> None:
-        align_input = self.work / "align-input.json"
-        align = self.work / "align.json"
-        write_json(
-            align_input,
-            {
-                "mode": "bootstrap",
-                "subject": "isolated cycle fixture",
-                "boundary": "only files inside the isolated fixture",
-                "cutoff": "before this test run",
-                "source_refs": ["source://fixture"],
-                "delta": {
-                    "summary": "the expected result is absent",
-                    "evidence_refs": ["source://fixture"],
-                },
-                "items": [
-                    {
-                        "change": "added",
-                        "previous_item_id": None,
-                        "change_reason": "initial observation",
-                        "state": "gap",
-                        "statement": "the expected result does not yet exist",
-                        "evidence_refs": ["source://fixture"],
-                        "route": "goal-candidate",
-                        "route_ref": None,
-                    }
-                ],
-                "retired": [],
-            },
-        )
-        self.expect_ok(
-            "Align0",
-            str(self.align_script),
+    def materialize_finish(
+        self,
+        label: str,
+        semantic: dict[str, Any],
+        input_path: Path,
+        output: Path,
+        previous: Path,
+        goal: Path,
+        plan: Path,
+        run_projection: Path,
+        expect_success: bool = True,
+    ) -> None:
+        write_json(input_path, semantic)
+        command = (
+            str(self.finish),
             "--input",
-            str(align_input),
+            str(input_path),
             "--output",
-            str(align),
-            "--null-bind",
-            "previous_align",
+            str(output),
+            "--bind",
+            f"previous_account={previous}",
+            "--bind",
+            f"goal={goal}",
+            "--bind",
+            f"plan={plan}",
+            "--bind",
+            f"run={run_projection}",
         )
-        self.validate_document(
-            "k4-align", align, "--null-bind", "previous_align"
+        if expect_success:
+            self.expect_ok(label, *command)
+            self.validate_document(
+                "k4-finish",
+                output,
+                "--bind",
+                f"previous_account={previous}",
+                "--bind",
+                f"goal={goal}",
+                "--bind",
+                f"plan={plan}",
+                "--bind",
+                f"run={run_projection}",
+            )
+        else:
+            self.expect_refusal(label, *command)
+
+    def finish_input(
+        self,
+        *,
+        item_id: str,
+        point_id: str,
+        terminal_control_id: str,
+        run_projection: Path,
+        terminal_state: str,
+        acceptance_result: str,
+        terminal_result: str,
+    ) -> dict[str, Any]:
+        completed = terminal_state == "completed"
+        projection = read_json(run_projection)["document"]
+        sources = [
+            "evidence://run",
+            "evidence://acceptance",
+            "evidence://terminal-control",
+        ]
+        return {
+            "subject": "isolated cycle fixture",
+            "boundary": "only files inside the isolated fixture",
+            "cutoff": "after halted Run",
+            "source_refs": sources,
+            "delta": {
+                "summary": "the bounded attempt halted and was judged",
+                "evidence_refs": ["evidence://run"],
+            },
+            "items": [
+                {
+                    "change": "changed",
+                    "previous_item_id": item_id,
+                    "change_reason": "the attempted route produced terminal evidence",
+                    "epistemic_kind": "fact",
+                    "state": "aligned" if completed else "gap",
+                    "statement": (
+                        "the expected result exists and validates"
+                        if completed
+                        else "the expected result remains incomplete"
+                    ),
+                    "evidence_refs": ["evidence://run"],
+                    "route": "none",
+                    "route_ref": None,
+                }
+            ],
+            "retired": [],
+            "acceptance_results": [
+                {
+                    "id": point_id,
+                    "result": acceptance_result,
+                    "actual_refs": ["actual://acceptance"],
+                    "comparison_refs": ["comparison://acceptance"],
+                    "evidence_refs": ["evidence://acceptance"],
+                }
+            ],
+            "terminal_control_results": [
+                {
+                    "id": terminal_control_id,
+                    "result": terminal_result,
+                    "actual_refs": ["actual://terminal-control"],
+                    "comparison_refs": ["comparison://terminal-control"],
+                    "evidence_refs": ["evidence://terminal-control"],
+                }
+            ],
+            "terminal_state": terminal_state,
+            "result_disposition": {
+                "state": "placed" if completed else "pending",
+                "statement": (
+                    "result remains inside the fixture"
+                    if completed
+                    else "partial result remains inside the fixture"
+                ),
+                "refs": ["actual://fixture-output"],
+            },
+            "incomplete_deliverable": (
+                None
+                if completed
+                else {
+                    "statement": "retain partial result and failed operation evidence",
+                    "refs": ["actual://fixture-output", "evidence://run"],
+                }
+            ),
+            "resume_ref": None if completed else "resume://failed-operation",
+            "run_log_ref": "run://fixture-ledger",
+            "run_head_event_sha256": projection["ledger_head_event_sha256"],
+        }
+
+    def run(self) -> None:
+        subject = "isolated cycle fixture"
+        boundary = "only files inside the isolated fixture"
+        observe_input = self.work / "observe-input.json"
+        observe0 = self.work / "observe0.json"
+        initial = self.observe_input(
+            mode="bootstrap",
+            subject=subject,
+            boundary=boundary,
+            source="source://fixture",
+            statement="the expected result does not yet exist",
+            state="gap",
+            route="goal-candidate",
+            change="added",
+            previous_item_id=None,
         )
-        item_id = read_json(align)["document"]["items"][0]["item_id"]
+        self.materialize_observe(
+            "Observe0", initial, observe_input, observe0
+        )
+        item_id = read_json(observe0)["document"]["account"]["items"][0]["item_id"]
+
+        observe_same_input = self.work / "observe-same-input.json"
+        observe_same = self.work / "observe-same.json"
+        same = self.observe_input(
+            mode="iterate",
+            subject=subject,
+            boundary=boundary,
+            source="source://same-boundary",
+            statement="the expected result is still absent",
+            state="gap",
+            route="goal-candidate",
+            change="changed",
+            previous_item_id=item_id,
+        )
+        self.materialize_observe(
+            "Observe same subject",
+            same,
+            observe_same_input,
+            observe_same,
+            observe0,
+        )
+        self.record("same-subject Observe iteration")
 
         goal_input = self.work / "goal-input.json"
         goal = self.work / "goal.json"
         write_json(
             goal_input,
             {
-                "align_item_ids": [item_id],
+                "observe_item_ids": [item_id],
                 "objective": "produce one valid stable result inside the fixture",
                 "target": "isolated cycle fixture v1",
                 "source_refs": ["source://fixture"],
                 "evidence_cutoff": {
-                    "at": "before observing this test attempt",
+                    "at": "before observing this attempt",
                     "included_refs": ["source://fixture"],
                 },
                 "baseline_refs": ["baseline://fixture-empty"],
                 "scope": ["create one result inside the fixture"],
-                "non_goals": ["adopt or publish the result"],
+                "non_goals": ["adopt or publish by implication"],
                 "execution_envelope": {
                     "authorization_ref": "authorization://isolated-test",
-                    "authorization_scope": "create and validate files only inside the fixture",
-                    "authorization_claim_limit": "permits fixture writes but does not prove semantic correctness",
+                    "authorization_scope": "fixture files only",
+                    "authorization_claim_limit": "no semantic correctness claim",
                     "available_tools": ["tool://produce", "tool://validate"],
                     "resources": ["local process"],
                     "budget": "one bounded attempt",
                     "maximum_side_effects": ["files inside the fixture"],
                     "stop_conditions": {
-                        "completed": "all acceptance and control judgments pass",
+                        "completed": "Finish finds all criteria passed",
                         "paused": "evidence unavailable",
-                        "failed": "a judgment has a Finding",
+                        "failed": "a criterion has a Finding",
                         "cancelled": "caller cancels",
                     },
-                    "incomplete_deliverable": "failed input, output, evidence, and resume command",
+                    "incomplete_deliverable": "partial output, evidence, and resume point",
                 },
                 "acceptance_points": [
                     {
@@ -263,7 +576,7 @@ class Harness:
                         "acceptance": {
                             "observable": "result path and validator status",
                             "conditions": ["the frozen fixture is used"],
-                            "window": "after execution and before adoption",
+                            "window": "after Run halt and before adoption",
                             "expected": "the result exists and validates",
                             "falsifier": "the result is absent or invalid",
                             "comparison_method": "compare exact path and validator output",
@@ -283,10 +596,25 @@ class Harness:
                         "allowed_domain": ["the isolated fixture"],
                         "forbidden_drift": ["write outside the fixture"],
                         "required_trace": ["invocation trace"],
-                        "check_method": "compare each write target with the boundary",
+                        "check_method": "compare every write with the boundary",
                         "check_timing": "invariant",
-                        "on_non_pass": "stop and retain the trace",
-                    }
+                        "on_non_pass": "halt and retain the trace",
+                    },
+                    {
+                        "statement": "terminal resource use remains within budget",
+                        "required_evidence": ["terminal budget comparison"],
+                        "judge": {
+                            "kind": "script",
+                            "claim_limit": "declared budget only",
+                        },
+                        "controlled_variable": "terminal resource use",
+                        "allowed_domain": ["the frozen bounded attempt"],
+                        "forbidden_drift": ["unbounded resource use"],
+                        "required_trace": ["terminal resource trace"],
+                        "check_method": "compare actual use with the frozen budget",
+                        "check_timing": "terminal",
+                        "on_non_pass": "Finish as non-completed",
+                    },
                 ],
                 "blockers": [],
                 "unknowns": [],
@@ -294,35 +622,40 @@ class Harness:
         )
         self.expect_ok(
             "Goal",
-            str(self.goal_script),
+            str(self.goal),
             "--input",
             str(goal_input),
             "--output",
             str(goal),
             "--bind",
-            f"align={align}",
+            f"observe={observe0}",
         )
         self.validate_document(
-            "k4-goal", goal, "--bind", f"align={align}"
+            "k4-goal", goal, "--bind", f"observe={observe0}"
         )
-        goal_value = read_json(goal)
-        point_id = goal_value["document"]["acceptance_points"][0]["point_id"]
-        control_id = goal_value["document"]["control_contracts"][0]["control_id"]
+        goal_value = read_json(goal)["document"]
+        point_id = goal_value["acceptance_points"][0]["point_id"]
+        invariant_id = goal_value["control_contracts"][0]["control_id"]
+        terminal_id = goal_value["control_contracts"][1]["control_id"]
 
         plan_input = self.work / "plan-input.json"
         plan = self.work / "plan.json"
         write_json(
             plan_input,
             {
-                "difference": "the expected result and its evidence are absent",
+                "difference": "the result and evidence are absent",
                 "route": {
-                    "claim": "produce and then validate one bounded result",
+                    "claim": "produce then validate one bounded result",
                     "supporting_refs": ["source://fixture"],
                     "counter_refs": [],
                 },
                 "operations": [
-                    self.operation([], point_id, control_id, "tool://produce"),
-                    self.operation([0], point_id, control_id, "tool://validate"),
+                    self.operation(
+                        [], point_id, [invariant_id, terminal_id], "tool://produce"
+                    ),
+                    self.operation(
+                        [0], point_id, [invariant_id, terminal_id], "tool://validate"
+                    ),
                 ],
                 "parallel_groups": [],
                 "blockers": [],
@@ -331,7 +664,7 @@ class Harness:
         )
         self.expect_ok(
             "Plan",
-            str(self.plan_script),
+            str(self.plan),
             "--input",
             str(plan_input),
             "--output",
@@ -339,57 +672,34 @@ class Harness:
             "--bind",
             f"goal={goal}",
         )
-        self.validate_document(
-            "k4-plan", plan, "--bind", f"goal={goal}"
-        )
+        self.validate_document("k4-plan", plan, "--bind", f"goal={goal}")
         operation_ids = [
-            operation["operation_id"]
-            for operation in read_json(plan)["document"]["operations"]
+            item["operation_id"] for item in read_json(plan)["document"]["operations"]
         ]
 
         run = self.work / "run.jsonl"
+        for index, operation_id in enumerate(operation_ids):
+            self.append_event(
+                f"Run operation {index}",
+                self.operation_event(operation_id, invariant_id),
+                self.work / f"run-operation-{index}.json",
+                run,
+                goal,
+                plan,
+            )
         self.append_event(
-            "Run operation 0",
-            self.operation_event(operation_ids[0], control_id),
-            self.work / "run-operation-0.json",
-            run,
-            goal,
-            plan,
-        )
-        self.append_event(
-            "Run operation 1",
-            self.operation_event(operation_ids[1], control_id),
-            self.work / "run-operation-1.json",
-            run,
-            goal,
-            plan,
-        )
-        self.append_event(
-            "Run acceptance",
+            "Run halt",
             {
-                "kind": "acceptance-result",
-                "point_id": point_id,
-                "result": "pass",
-                "actual_refs": ["actual://fixture"],
-                "comparison_refs": ["comparison://pass"],
-                "evidence_refs": ["evidence://acceptance-pass"],
-            },
-            self.work / "run-acceptance.json",
-            run,
-            goal,
-            plan,
-        )
-        self.append_event(
-            "Run stop",
-            {
-                "kind": "stop",
-                "stop_state": "completed",
-                "budget_evidence_refs": ["budget://within"],
-                "side_effect_evidence_refs": ["effects://within"],
-                "evidence_refs": ["evidence://completed"],
+                "kind": "halt",
+                "after_operation_id": operation_ids[-1],
+                "next_operation_id": None,
+                "trigger": "route-exhausted",
+                "budget_evidence_refs": ["budget://observed"],
+                "side_effect_evidence_refs": ["effects://observed"],
+                "evidence_refs": ["evidence://halt"],
                 "resume_ref": None,
             },
-            self.work / "run-stop.json",
+            self.work / "run-halt.json",
             run,
             goal,
             plan,
@@ -407,121 +717,189 @@ class Harness:
             "--bind",
             f"plan={plan}",
         )
-        if read_json(projection)["document"]["result"] != "pass":
-            raise AssertionError("complete Run projection did not pass")
+        projection_document = read_json(projection)["document"]
+        if (
+            projection_document["execution_result"] != "pass"
+            or not projection_document["halted"]
+            or "acceptance_results" in projection_document
+            or "control_results" in projection_document
+        ):
+            raise AssertionError("Run projection is not execution-only")
 
-        align1_input = self.work / "align1-input.json"
-        align1 = self.work / "align1.json"
-        write_json(
-            align1_input,
+        finish_input = self.work / "finish-input.json"
+        finish = self.work / "finish.json"
+        completed = self.finish_input(
+            item_id=item_id,
+            point_id=point_id,
+            terminal_control_id=terminal_id,
+            run_projection=projection,
+            terminal_state="completed",
+            acceptance_result="pass",
+            terminal_result="pass",
+        )
+        self.materialize_finish(
+            "Finish completed",
+            completed,
+            finish_input,
+            finish,
+            observe0,
+            goal,
+            plan,
+            projection,
+        )
+        self.record("complete Observe-Goal-Plan-Run-Finish cycle")
+
+        finish_item_id = read_json(finish)["document"]["account"]["items"][0]["item_id"]
+        post_finish_input = self.work / "post-finish-observe-input.json"
+        post_finish = self.work / "post-finish-observe.json"
+        post = self.observe_input(
+            mode="iterate",
+            subject=subject,
+            boundary=boundary,
+            source="source://post-finish",
+            statement="the finished result remains observable",
+            state="aligned",
+            route="goal-candidate",
+            change="changed",
+            previous_item_id=finish_item_id,
+        )
+        self.materialize_observe(
+            "Observe after Finish",
+            post,
+            post_finish_input,
+            post_finish,
+            finish,
+        )
+        self.record("Finish-to-Observe continuation")
+
+        early_run = self.work / "early-run.jsonl"
+        self.append_event(
+            "early non-pass operation",
+            self.operation_event(operation_ids[0], invariant_id, "Finding"),
+            self.work / "early-operation.json",
+            early_run,
+            goal,
+            plan,
+        )
+        self.append_event(
+            "early halt",
             {
-                "mode": "iterate",
-                "subject": "isolated cycle fixture",
-                "boundary": "only files inside the isolated fixture",
-                "cutoff": "after Run projection",
-                "source_refs": ["source://run-result"],
-                "delta": {
-                    "summary": "the bounded Run completed",
-                    "evidence_refs": ["source://run-result"],
-                },
-                "items": [
-                    {
-                        "change": "changed",
-                        "previous_item_id": item_id,
-                        "change_reason": "Run produced the expected result",
-                        "state": "aligned",
-                        "statement": "the expected result now exists and validates",
-                        "evidence_refs": ["source://run-result"],
-                        "route": "none",
-                        "route_ref": None,
-                    }
-                ],
-                "retired": [],
+                "kind": "halt",
+                "after_operation_id": operation_ids[0],
+                "next_operation_id": operation_ids[0],
+                "trigger": "operation-non-pass",
+                "budget_evidence_refs": ["budget://observed"],
+                "side_effect_evidence_refs": ["effects://observed"],
+                "evidence_refs": ["evidence://early-halt"],
+                "resume_ref": "resume://failed-operation",
             },
+            self.work / "early-halt.json",
+            early_run,
+            goal,
+            plan,
         )
+        early_projection = self.work / "early-projection.json"
         self.expect_ok(
-            "Align1",
-            str(self.align_script),
-            "--input",
-            str(align1_input),
+            "early Run projection",
+            str(self.run_project),
+            "--log",
+            str(early_run),
             "--output",
-            str(align1),
+            str(early_projection),
             "--bind",
-            f"previous_align={align}",
+            f"goal={goal}",
+            "--bind",
+            f"plan={plan}",
         )
-        self.validate_document(
-            "k4-align", align1, "--bind", f"previous_align={align}"
+        early_finish_input = self.finish_input(
+            item_id=item_id,
+            point_id=point_id,
+            terminal_control_id=terminal_id,
+            run_projection=early_projection,
+            terminal_state="failed",
+            acceptance_result="unknown",
+            terminal_result="unknown",
         )
-        self.passed += 1
-        print("PASS complete cycle")
+        early_finish = self.work / "early-finish.json"
+        self.materialize_finish(
+            "Finish early non-pass",
+            early_finish_input,
+            self.work / "early-finish-input.json",
+            early_finish,
+            observe0,
+            goal,
+            plan,
+            early_projection,
+        )
+        self.record("truthful early/non-pass Finish")
 
         self.expect_refusal(
             "occupied output",
-            str(self.align_script),
+            str(self.observe),
             "--input",
-            str(align_input),
+            str(observe_input),
             "--output",
-            str(align),
+            str(observe0),
             "--null-bind",
-            "previous_align",
+            "previous_account",
         )
 
+        invalid_goal = json.loads(json.dumps(read_json(goal_input)))
+        invalid_goal["observe_item_ids"] = ["item-0000000000000000"]
         invalid_goal_input = self.work / "invalid-goal-input.json"
-        invalid_goal = read_json(goal_input)
-        invalid_goal["align_item_ids"] = ["item-0000000000000000"]
         write_json(invalid_goal_input, invalid_goal)
         self.expect_refusal(
-            "unknown Align selection",
-            str(self.goal_script),
+            "unknown Observe selection",
+            str(self.goal),
             "--input",
             str(invalid_goal_input),
             "--output",
             str(self.work / "never-goal.json"),
             "--bind",
-            f"align={align}",
+            f"observe={observe0}",
         )
 
-        uncovered_plan_input = self.work / "uncovered-plan-input.json"
-        uncovered_plan = read_json(plan_input)
-        for operation in uncovered_plan["operations"]:
-            operation["controlled_by"] = []
-        write_json(uncovered_plan_input, uncovered_plan)
+        uncovered = json.loads(json.dumps(read_json(plan_input)))
+        for operation in uncovered["operations"]:
+            operation["controlled_by"] = [invariant_id]
+        uncovered_input = self.work / "uncovered-plan-input.json"
+        write_json(uncovered_input, uncovered)
         self.expect_refusal(
             "missing Goal control coverage",
-            str(self.plan_script),
+            str(self.plan),
             "--input",
-            str(uncovered_plan_input),
+            str(uncovered_input),
             "--output",
             str(self.work / "never-uncovered-plan.json"),
             "--bind",
             f"goal={goal}",
         )
 
-        parallel_plan_input = self.work / "parallel-plan-input.json"
-        parallel_plan = read_json(plan_input)
-        parallel_plan["parallel_groups"] = [
+        parallel = json.loads(json.dumps(read_json(plan_input)))
+        parallel["parallel_groups"] = [
             {
                 "operation_indices": [0, 1],
                 "reason": "invalid dependent parallelism",
                 "guards": ["fixture only"],
             }
         ]
-        write_json(parallel_plan_input, parallel_plan)
+        parallel_input = self.work / "parallel-plan-input.json"
+        write_json(parallel_input, parallel)
         self.expect_refusal(
             "unsafe parallel dependency",
-            str(self.plan_script),
+            str(self.plan),
             "--input",
-            str(parallel_plan_input),
+            str(parallel_input),
             "--output",
             str(self.work / "never-parallel-plan.json"),
             "--bind",
             f"goal={goal}",
         )
 
-        cyclic_plan = self.work / "cyclic-plan.json"
         cyclic = read_json(plan)
         cyclic["document"]["operations"][0]["depends_on"] = [operation_ids[1]]
         refresh_document_digest(cyclic)
+        cyclic_plan = self.work / "cyclic-plan.json"
         write_json(cyclic_plan, cyclic)
         self.expect_refusal(
             "cyclic Plan",
@@ -535,17 +913,14 @@ class Harness:
             f"goal={goal}",
         )
 
-        coverageless_plan = self.work / "coverageless-plan.json"
         coverageless = read_json(plan)
-        coverageless["document"]["coverage"] = {
-            "acceptance": [],
-            "controls": [],
-        }
+        coverageless["document"]["coverage"]["controls"] = []
         refresh_document_digest(coverageless)
+        coverageless_plan = self.work / "coverageless-plan.json"
         write_json(coverageless_plan, coverageless)
         self.append_event(
             "corrupted Plan coverage",
-            self.operation_event(operation_ids[0], control_id),
+            self.operation_event(operation_ids[0], invariant_id),
             self.work / "coverageless-event.json",
             self.work / "never-coverageless-run.jsonl",
             goal,
@@ -553,10 +928,9 @@ class Harness:
             expect_success=False,
         )
 
-        bypass = self.operation_event(operation_ids[1], control_id)
         self.append_event(
             "dependency bypass",
-            bypass,
+            self.operation_event(operation_ids[1], invariant_id),
             self.work / "bypass-event.json",
             self.work / "never-bypass-run.jsonl",
             goal,
@@ -564,33 +938,7 @@ class Harness:
             expect_success=False,
         )
 
-        premature_log = self.work / "never-premature-run.jsonl"
-        self.append_event(
-            "premature setup operation",
-            self.operation_event(operation_ids[0], control_id),
-            self.work / "premature-operation.json",
-            premature_log,
-            goal,
-            plan,
-        )
-        self.append_event(
-            "premature acceptance",
-            {
-                "kind": "acceptance-result",
-                "point_id": point_id,
-                "result": "pass",
-                "actual_refs": ["actual://fixture"],
-                "comparison_refs": ["comparison://pass"],
-                "evidence_refs": ["evidence://premature"],
-            },
-            self.work / "premature-acceptance.json",
-            premature_log,
-            goal,
-            plan,
-            expect_success=False,
-        )
-
-        unchecked = self.operation_event(operation_ids[0], control_id)
+        unchecked = self.operation_event(operation_ids[0], invariant_id)
         unchecked["invariant_checks"] = []
         self.append_event(
             "unchecked invariant",
@@ -602,60 +950,113 @@ class Harness:
             expect_success=False,
         )
 
-        incomplete_log = self.work / "never-incomplete-run.jsonl"
-        self.append_event(
-            "incomplete setup operation",
-            self.operation_event(operation_ids[0], control_id),
-            self.work / "incomplete-operation.json",
-            incomplete_log,
-            goal,
-            plan,
+        subject_drift = json.loads(json.dumps(same))
+        subject_drift["subject"] = "different subject"
+        subject_drift_input = self.work / "subject-drift-input.json"
+        write_json(subject_drift_input, subject_drift)
+        self.expect_refusal(
+            "actionable subject drift",
+            str(self.observe),
+            "--input",
+            str(subject_drift_input),
+            "--output",
+            str(self.work / "never-subject-drift.json"),
+            "--bind",
+            f"previous_account={observe0}",
+            contains=("subject", "previous Account", "bootstrap"),
         )
-        self.append_event(
-            "incomplete execution coverage",
-            {
-                "kind": "stop",
-                "stop_state": "completed",
-                "budget_evidence_refs": ["budget://within"],
-                "side_effect_evidence_refs": ["effects://within"],
-                "evidence_refs": ["evidence://incomplete"],
-                "resume_ref": None,
-            },
-            self.work / "incomplete-stop.json",
-            incomplete_log,
+
+        boundary_drift = json.loads(json.dumps(same))
+        boundary_drift["boundary"] = "different boundary"
+        boundary_drift_input = self.work / "boundary-drift-input.json"
+        write_json(boundary_drift_input, boundary_drift)
+        self.expect_refusal(
+            "actionable boundary drift",
+            str(self.observe),
+            "--input",
+            str(boundary_drift_input),
+            "--output",
+            str(self.work / "never-boundary-drift.json"),
+            "--bind",
+            f"previous_account={observe0}",
+            contains=("boundary", "previous Account", "bootstrap"),
+        )
+
+        premature = self.finish_input(
+            item_id=item_id,
+            point_id=point_id,
+            terminal_control_id=terminal_id,
+            run_projection=early_projection,
+            terminal_state="completed",
+            acceptance_result="pass",
+            terminal_result="pass",
+        )
+        self.materialize_finish(
+            "premature acceptance",
+            premature,
+            self.work / "premature-finish-input.json",
+            self.work / "never-premature-finish.json",
+            observe0,
             goal,
             plan,
+            early_projection,
+            expect_success=False,
+        )
+
+        incomplete = json.loads(json.dumps(premature))
+        incomplete["acceptance_results"][0]["result"] = "unknown"
+        self.materialize_finish(
+            "incomplete execution coverage",
+            incomplete,
+            self.work / "incomplete-finish-input.json",
+            self.work / "never-incomplete-finish.json",
+            observe0,
+            goal,
+            plan,
+            early_projection,
             expect_success=False,
         )
 
         missing_parent = self.work / "missing-parent"
         self.expect_refusal(
             "missing output parent",
-            str(self.align_script),
+            str(self.observe),
             "--input",
-            str(align_input),
+            str(observe_input),
             "--output",
             str(missing_parent / "never.json"),
             "--null-bind",
-            "previous_align",
+            "previous_account",
         )
         if missing_parent.exists():
             raise AssertionError("missing output parent was created")
 
-        print(f"PASS {self.passed}/12 established cases")
+        print(f"PASS {len(self.passed)}/17 frozen cases")
 
 
 def copy_extension(source: Path, target: Path) -> None:
-    ignored = shutil.ignore_patterns(
-        ".git",
-        "__pycache__",
-        "manifest.json",
-    )
+    ignored = shutil.ignore_patterns(".git", "__pycache__", "manifest.json")
     shutil.copytree(source, target, ignore=ignored)
 
 
 def main() -> int:
-    with tempfile.TemporaryDirectory(prefix="k4-work-cycle-conformance-") as directory:
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--write-manifest",
+        action="store_true",
+        help="mechanically regenerate manifest.json from current published files",
+    )
+    args = parser.parse_args()
+    if args.write_manifest:
+        generate_manifest(ROOT)
+        validate_manifest(ROOT)
+        print("PASS generated manifest")
+        return 0
+
+    validate_manifest(ROOT)
+    with tempfile.TemporaryDirectory(
+        prefix="k4-work-cycle-conformance-"
+    ) as directory:
         root = Path(directory)
         extension = root / "extension"
         work = root / "work"

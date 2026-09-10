@@ -1,0 +1,51 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+skill_dir=$(dirname -- "$script_dir")
+tool=${K4_STABLE_RESULT:-}
+
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage: materialize --input FILE --output FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE --bind run=FILE' \
+        '' \
+        'Create one immutable Finish Account from one halted Run projection.' \
+        '' \
+        'Options:' \
+        '  --input FILE    JSON object with the semantic fields below' \
+        '  --output FILE   absent output path whose parent already exists' \
+        '  --bind previous_account=FILE  exact pre-Goal Observe Account' \
+        '  --bind goal=FILE              exact frozen Goal' \
+        '  --bind plan=FILE              exact executable Plan' \
+        '  --bind run=FILE               exact halted Run projection, including ledger head' \
+        '' \
+        'Semantic input:' \
+        '  subject, boundary, cutoff, source_refs, delta, items, retired' \
+        '  acceptance_results[]: {id, result, actual_refs, comparison_refs, evidence_refs}' \
+        '  terminal_control_results[]: same fields, one per terminal control' \
+        '  terminal_state: completed | paused | failed | cancelled' \
+        '  result_disposition: {state, statement, refs}' \
+        '  incomplete_deliverable: null | {statement, refs}' \
+        '  resume_ref: null only for completed; nonempty otherwise' \
+        '  run_log_ref, run_head_event_sha256: ledger reference and exact head event digest' \
+        '' \
+        'Output:' \
+        '  The stable Finish envelope stores the next full Account and closure.' \
+        '' \
+        'Exit status: 0 on materialization; 1 without output on refusal.'
+    exit 0
+fi
+
+if [ -z "$tool" ]; then tool=$(command -v stable-result || true); fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
+    tool="$skill_dir/../../tools/stable-result"
+fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
+    tool="$skill_dir/../../workspace/tools/stable-result"
+fi
+if [ -z "$tool" ]; then
+    echo "stable-result is not available" >&2
+    exit 1
+fi
+
+exec "$tool" --contract "$skill_dir/assets/protocol.cue" materialize "$@"

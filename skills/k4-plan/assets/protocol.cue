@@ -25,7 +25,7 @@ context: _
 	content_sha256: #Digest
 })
 #GoalEnvelope: close({
-	schema:            "k4-goal-document/v3"
+	schema:            "k4-goal-document/v4"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -125,7 +125,7 @@ context: _
 	status:   "executable" | "not-executable" | "unknown"
 })
 #Envelope: close({
-	schema:            "k4-plan-document/v3"
+	schema:            "k4-plan-document/v4"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({goal: #Binding})
@@ -298,7 +298,7 @@ _document: #Document & {
 	status:          _status
 }
 generate: _generateChecks & close({
-	schema: "k4-plan-document/v3"
+	schema: "k4-plan-document/v4"
 	bindings: close({goal: _goal.binding})
 	document: _document
 })

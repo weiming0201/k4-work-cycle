@@ -22,19 +22,23 @@ context: _
 	sha256:         #Digest
 	content_sha256: #Digest
 })
-#AlignEnvelope: close({
-	schema:            "k4-align-document/v2"
+#ObserveEnvelope: close({
+	schema:            "k4-observe-document/v1"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
 	document: close({
-		goal_candidate_ids: [...#ItemID] & list.UniqueItems()
+		account: {...}
+		observation: close({
+			goal_candidate_ids: [...#ItemID] & list.UniqueItems()
+			...
+		})
 		...
 	})
 })
-#BoundAlign: close({
+#BoundObserve: close({
 	binding: #Binding
-	value:   #AlignEnvelope
+	value:   #ObserveEnvelope
 })
 #Judge: close({
 	kind:        "self" | "independent-agent" | "script" | "human"
@@ -109,7 +113,7 @@ context: _
 	included_refs: #NonEmptyStrings
 })
 #Input: close({
-	align_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
+	observe_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
 	objective:          #Text
 	target:             #Text
 	source_refs:        #NonEmptyStrings
@@ -124,7 +128,7 @@ context: _
 	unknowns: #Strings
 })
 #Document: close({
-	align_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
+	observe_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
 	objective:          #Text
 	target:             #Text
 	source_refs:        #NonEmptyStrings
@@ -140,22 +144,22 @@ context: _
 	status:   "frozen" | "not-frozen" | "unknown"
 })
 #Envelope: close({
-	schema:            "k4-goal-document/v3"
+	schema:            "k4-goal-document/v4"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
-	bindings: close({align: #Binding})
+	bindings: close({observe: #Binding})
 	document: #Document
 })
 
 _input:           #Input & context.input
-_align:           #BoundAlign & context.bindings.align
-_alignCandidates: _align.value.document.goal_candidate_ids
-for id in _input.align_item_ids {
-	if !list.Contains(_alignCandidates, id) {_invalid: _|_}
+_observe:           #BoundObserve & context.bindings.observe
+_observeCandidates: _observe.value.document.observation.goal_candidate_ids
+for id in _input.observe_item_ids {
+	if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 }
 _generateChecks: {
-	for id in _input.align_item_ids {
-		if !list.Contains(_alignCandidates, id) {_invalid: _|_}
+	for id in _input.observe_item_ids {
+		if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 	}
 }
 
@@ -195,7 +199,7 @@ if len(_input.blockers) == 0 && len(_input.unknowns) > 0 {_status: "unknown"}
 if _status == "frozen" && len(_points) == 0 {_invalid: _|_}
 
 _document: #Document & {
-	align_item_ids:     _input.align_item_ids
+	observe_item_ids:   _input.observe_item_ids
 	objective:          _input.objective
 	target:             _input.target
 	source_refs:        _input.source_refs
@@ -212,20 +216,20 @@ _document: #Document & {
 }
 
 generate: _generateChecks & close({
-	schema: "k4-goal-document/v3"
-	bindings: close({align: _align.binding})
+	schema: "k4-goal-document/v4"
+	bindings: close({observe: _observe.binding})
 	document: _document
 })
 
 _existing: #Envelope & context.existing & {
-	bindings: close({align: _align.binding})
+	bindings: close({observe: _observe.binding})
 }
-for id in _existing.document.align_item_ids {
-	if !list.Contains(_alignCandidates, id) {_invalid: _|_}
+for id in _existing.document.observe_item_ids {
+	if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 }
 _validateChecks: {
-	for id in _existing.document.align_item_ids {
-		if !list.Contains(_alignCandidates, id) {_invalid: _|_}
+	for id in _existing.document.observe_item_ids {
+		if !list.Contains(_observeCandidates, id) {_invalid: _|_}
 	}
 }
 _existingPointIDs: [for point in _existing.document.acceptance_points {point.point_id}]

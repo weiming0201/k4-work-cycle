@@ -9,7 +9,7 @@ if [ "${1:-}" = "--help" ]; then
     printf '%s\n' \
         'Usage: project --log FILE --output FILE --bind goal=FILE --bind plan=FILE' \
         '' \
-        'Create one current Run projection from an append-only event log.' \
+        'Create one execution-only Run projection from an append-only event log.' \
         '' \
         'Options:' \
         '  --log FILE        append-only JSONL event log' \
@@ -18,7 +18,9 @@ if [ "${1:-}" = "--help" ]; then
         '  --bind plan=FILE  exact executable Plan' \
         '' \
         'Output:' \
-        '  The current Run view is stored in the output envelope under document.' \
+        '  The current Run view contains operations, invariant observations,' \
+        '  execution result, halt position, event count, and ledger head.' \
+        '  It contains no Goal acceptance or terminal-control judgment.' \
         '' \
         'Exit status: 0 on projection; 1 on invalid log, binding, or unsafe write.'
     exit 0

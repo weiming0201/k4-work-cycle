@@ -24,17 +24,15 @@ if [ "${1:-}" = "--help" ]; then
         '  invariant_checks[]: {control_id, result, actual_refs, trace_refs,' \
         '    comparison_refs, evidence_refs}' \
         '  deferred_issues[]: {kind, statement, evidence_refs}' \
-        '  acceptance-result: {kind, point_id, result, actual_refs,' \
-        '    comparison_refs, evidence_refs}' \
-        '  control-result: {kind, control_id, result, actual_refs, trace_refs,' \
-        '    comparison_refs, evidence_refs}' \
-        '  stop: {kind, stop_state, budget_evidence_refs,' \
-        '    side_effect_evidence_refs, evidence_refs, resume_ref}' \
+        '  halt: {kind, after_operation_id, next_operation_id, trigger,' \
+        '    budget_evidence_refs, side_effect_evidence_refs, evidence_refs,' \
+        '    resume_ref}' \
         '  result: pass | Finding | unknown' \
-        '  stop_state: completed | paused | failed | cancelled' \
+        '  trigger: route-exhausted | operation-non-pass | blocked | paused |' \
+        '    cancelled | external-change' \
         '' \
         'Output:' \
-        '  One generated event is appended to the JSONL log.' \
+        '  One generated operation-result or halt event is appended to the JSONL log.' \
         '' \
         'Exit status: 0 after one append; 1 without append on invalid input.'
     exit 0

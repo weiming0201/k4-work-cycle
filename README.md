@@ -1,16 +1,20 @@
 # K4 Work Cycle Agent Extension
 
-This Resource packages four different document protocols as four peer Agent
-Skills:
+This Resource packages five responsibilities over four storage strategies as
+peer Agent Skills:
 
-- `k4-align`: iterates a full account of the current evidenced situation;
-- `k4-goal`: freezes one set of terminal-state audit points;
-- `k4-plan`: freezes one operation DAG between baseline and predicted terminal
-  state;
-- `k4-run`: appends actual execution events and projects current Run state.
+- `k4-observe`: creates the opening Account and its gap/opportunity report;
+- `k4-goal`: freezes one flat mandate of acceptance and operating limits;
+- `k4-plan`: assigns and orders permitted work in an operation DAG;
+- `k4-run`: appends actual operation and halt facts to the journal;
+- `k4-finish`: reconciles the journal into the closing Account and stage report.
 
-Read [`WORKFLOW.md`](./WORKFLOW.md) for the common semantics and
-[`DESIGN.md`](./DESIGN.md) for the implementation boundary.
+Observe and Finish share the Account storage strategy but remain separate
+temporal responsibilities. The retained trace supports later independent audit;
+no internal stage becomes that audit by implication.
+
+Read [`WORKFLOW.md`](./WORKFLOW.md) for semantics and
+[`DESIGN.md`](./DESIGN.md) for implementation boundaries.
 
 ## Source layout
 
@@ -22,34 +26,33 @@ manifest.cue
 manifest.json
 tools/stable-result
 skills/
-  k4-align/{SKILL.md,assets/,references/,scripts/}
+  k4-observe/{SKILL.md,assets/,references/,scripts/}
   k4-goal/{SKILL.md,assets/,references/,scripts/}
   k4-plan/{SKILL.md,assets/,references/,scripts/}
   k4-run/{SKILL.md,assets/,references/,scripts/}
+  k4-finish/{SKILL.md,assets/,references/,scripts/}
 tests/conformance.py
 ```
 
-The only fixed executable dependency is `cue v0.17.1`. The shared Tool has no
-stage semantics; each Skill supplies its own CUE contract.
+The only fixed executable dependency is CUE `v0.17.1`. The shared Tool is
+stage-neutral; every Skill supplies its own CUE contract.
 
 ## Mechanical interface
 
-The Skill-local scripts are the public entrypoints. Align, Goal, and Plan each
-materialize a new immutable document. Run appends one event at a time and
-projects the ledger into a regenerable derived view. Every stable output is
-written by the shared Tool; semantic JSON supplied by an Agent remains
-temporary input.
+Skill-local scripts are the public entrypoints. Observe, Goal, Plan, and Finish
+materialize immutable documents. Run appends one event and projects its ledger.
+Every stable JSON or JSONL output is Tool-generated; semantic input remains a
+temporary work product.
 
-Run the preserved contract cases from the Resource root:
+Run the source conformance suite from the Resource root:
 
 ```text
 python3 tests/conformance.py
 ```
 
-The conformance test uses isolated temporary directories and must not write build
-artifacts into this Resource.
+Tests use isolated temporary directories. Mechanical validation proves only
+declared structure, bindings, write semantics, and transitions. It does not
+prove evidence truth, Goal or Plan sufficiency, or external authorization.
 
-Mechanical validation proves only the declared structure, bindings, write
-semantics, and state-transition rules. It does not prove that source evidence
-is true, the chosen Goal or Plan is sufficient, or an external action was
-authorized.
+Publishing this Resource does not install it. Runtime projection and
+fresh-session discovery belong to a later, separately authorized Goal.

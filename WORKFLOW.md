@@ -1,112 +1,162 @@
 # K4 Work Cycle
 
-K4 Work Cycle narrows an open situation into one bounded attempt and then
-returns the actual outcome to the next round of alignment. It is composed from
-four different document protocols, not four instances of one result format.
+K4 Work Cycle narrows one evidenced situation into one bounded attempt, records
+what actually happened, closes that attempt truthfully, and returns the resulting
+situation for renewed observation.
 
 ```text
-Align[n] -> Goal[n] -> Plan[n] -> Run[n] -> Align[n+1]
+Observe* -> Goal -> Plan -> Run -> Finish -> Observe*
 ```
 
-The arrows declare consumption order. They do not make the four protocols
-symmetrical and do not require four actors, four processes, or one permanent
-runtime.
+The arrows are exact consumption relations. The five stages are responsibilities,
+not actors or five instances of one generic form. They use four storage
+strategies: Observe and Finish both produce a full Account; Goal produces a
+flat mandate; Plan produces an operation DAG; Run produces an append-only
+journal. Alignment is the relation each boundary must preserve, not a sixth
+stage.
 
-## Align: an iterated full account
+## Observe: open the general ledger
 
-Align states the evidenced situation currently visible inside one observation
-boundary. It classifies what is aligned, open, conflicting, or unknown and
-exposes possible inputs to a later Goal.
-
-An initial Align has no predecessor. It starts from a bounded subject and a
-declared evidence set:
+Observe creates a sourced full Account of one subject inside one observation
+boundary. A bootstrap Account begins without a predecessor. A later Observe
+binds one exact prior Account produced by Observe or Finish, admits an evidence
+delta, and creates a new full Account:
 
 ```text
-Align[0] = align(null, Evidence[0])
+Account[0]   = observe(null, Evidence[0])
+Account[n+1] = observe(Account[n], DeltaEvidence[n+1])
 ```
 
-A later Align consumes one exact prior Align plus an evidence delta and emits a
-new full account:
+Every new Account states its subject, included and excluded boundary, evidence
+cutoff, sources, delta, and current items. Each current item is retained,
+changed, or added; every absent predecessor is explicitly retired. Items keep
+fact, source statement, inference, preference, conflict, gap, and unknown
+distinguishable. Its observation report exposes the current status and indexes
+Goal candidates from those items. The Account is the opening general ledger;
+the report is its gap and opportunity view. A Goal candidate is only an exposed
+possibility, not a selected task.
 
-```text
-Align[n+1] = align(Align[n], DeltaEvidence[n+1])
-```
+Observe is repeatable and side-effect-free with respect to the observed object.
+It does not define acceptance, choose operations, execute repair, or judge a
+finished attempt. Iteration preserves subject and observation boundary. A new
+subject or boundary starts a new bootstrap Account instead of disguising a
+scope change as evidence delta.
 
-The new document identifies retained, changed, added, and retired statements.
-It is not an appended diary and does not modify its predecessor. A failed,
-paused, cancelled, or completed Run may all provide evidence to a later Align;
-Align reports the actual settled situation rather than turning it into success.
+## Goal: freeze the flat mandate
 
-Align may propose a next direction. It does not freeze a desired terminal
-state, acceptance test, action route, or permission.
+Goal binds one exact current Observe Account and selects its explicit Goal
+candidates. It freezes one attempt's baseline, predicted terminal state,
+evidence cutoff, acceptance points, execution controls, available tools,
+authority, resources, budget, maximum effects, stop conditions, and incomplete
+deliverable.
 
-## Goal: a one-use set of audit points
+These clauses are a flat responsibility set. Goal does not order them into
+work. Acceptance states how the result will be assessed; budget and resources
+bound what may be consumed; authority and controls bound conduct; stop
+conditions and the incomplete deliverable limit loss when the attempt cannot
+complete.
 
-Goal binds one exact Align selection and freezes one attempt's current
-baseline, predicted terminal state, and method of judging that terminal state.
-Its acceptance points say what must be observable, under which conditions,
-what would falsify the prediction, how evidence is sampled, and who may make
-which bounded judgment. Its execution envelope freezes the tools, authority,
-resources, budget, maximum effects, stop conditions, and controls available to
-the attempt.
+Acceptance points define observable terminal differences and how they will be
+judged. Controls define variables that must remain inside declared bounds while
+the attempt runs. Goal determines what would count as an acceptable attempt;
+it contains no operation or route.
 
-A Goal is immutable and single-use as a contract. A semantic change produces a
-new Goal; evidence gathered after its cutoff cannot be used to rewrite its
-prediction. Goal defines what counts as reaching the terminal state. It does
-not define the transition that reaches it.
+A frozen Goal is immutable and single-use. If formation remains interrupted,
+unknown, or blocked, no Run failure has occurred: the attempt has not started.
+A semantic change requires a new Goal bound to the still-current Account, or a
+new Observe first when reality or the evidence cutoff has changed.
 
-## Plan: a one-use transition DAG
+## Plan: organize the permitted work
 
-Plan binds one exact Goal and freezes one selected transition from the Goal's
-baseline to its predicted terminal state. Its nodes declare operations; its
-edges declare necessary precedence. Every operation fixes its tool or action,
-responsible executor, inputs, outputs, readable and writable positions,
-permissions, resources, maximum effects, checks, retry ceiling, and recovery
-position. Concurrency exists only where the graph and explicit guards permit
-it.
+Plan binds one exact frozen Goal and defines one operation DAG from its baseline
+toward its predicted terminal state. Every node fixes its dependencies, Goal
+points and controls served, tool, executor, readable and writable positions,
+permissions, resources, maximum effects, checks, retry ceiling, and recovery.
+The graph turns the flat mandate into assigned work: who or what performs each
+operation, which results are prerequisites, and which independent operations
+may run in parallel. Concurrency exists only where the graph and explicit
+guards permit it.
 
-A Plan is immutable and single-use as an execution contract. A changed route,
-operation, dependency, tool, path boundary, or recovery rule requires a new
-Plan. Plan constrains how state may evolve. It does not claim that any
-operation actually happened.
+Plan reduces later execution to governed choices. It neither changes Goal
+criteria nor records actual work. A route, operation, dependency, tool, path,
+permission, effect, or recovery change requires a new Plan. If an executable
+Plan cannot be formed, no Run failure has occurred.
 
-## Run: a monotonic event ledger
+## Run: append the actual journal
 
-Run binds one exact Goal and its exact Plan. It records what actually happens
-as an append-only sequence of events. Each event has a mechanical sequence,
-predecessor identity, time, Plan position, evidence, effects, and outcome. An
-event never rewrites an earlier event, and a later success never removes an
-earlier failure.
+Run binds one exact Goal and its exact executable Plan. It attempts only an
+eligible Plan operation and appends the actual result, evidence, trace,
+invariant-control observations, and deferred issues. Earlier events are never
+rewritten. A current projection is mechanically reconstructible from the
+journal and is not a second history or a general ledger.
 
-The current Run view is a mechanical projection of the Goal, Plan, and complete
-event sequence. It can be rebuilt and therefore is not an alternative history.
-The projection separates operation outcomes, Goal acceptance judgments,
-control judgments, budget and effect evidence, and the actual stop state.
+Run may halt after any operation. Its final event records only the actual halt:
+where execution stopped, what triggered the stop, observed budget and effects,
+and the available resume position. Run does not judge Goal acceptance or
+terminal controls, decide whether the overall attempt completed, repair,
+replan, adopt output, publish by implication, or choose the next Goal.
 
-Run follows the Plan. It does not silently replan, widen authority, adopt an
-output, or choose the next Goal. When the Plan can no longer govern the next
-action, Run stops at a recoverable position and returns the resulting evidence
-to Align. Potential unresolved issues discovered during an operation are part
-of its Run record; they are preserved as evidence but cannot trigger any
-unplanned investigation, repair, or other action in that Run.
+An issue outside the current operation is recorded for later reconciliation and
+cannot trigger unplanned work. When Plan, authority, resources, or checks no
+longer govern the next action, Run halts rather than expanding the attempt.
 
-## Shared boundary
+## Finish: close the general ledger
 
-The four protocols share only their cycle, exact predecessor identity, evidence
-discipline, and deterministic write boundary. Their document shapes, update
-semantics, and completion conditions remain different:
+Finish binds the exact pre-Goal Account, Goal, Plan, and halted Run. From those
+frozen inputs it judges every Goal acceptance point and terminal control,
+determines the truthful terminal state, identifies actual result placement,
+and preserves an incomplete deliverable and resume position whenever work did
+not complete.
 
-| Protocol | Stable shape | Change rule |
-| --- | --- | --- |
-| Align | full current account plus explicit delta impact | create a new iteration |
-| Goal | audit-point contract | create a new contract |
-| Plan | operation DAG | create a new graph |
-| Run | event ledger plus derived view | append an event; rebuild the view |
+Finish emits a new full Account with the same common Account core as Observe.
+Its evidence delta is the bounded attempt and its verified outcome: Run's
+journal is reconciled with the opening Account, Goal, and Plan before entering
+the closing general ledger. Finish adds a stage report through its closure:
+exact attempt bindings, bounded acceptance and control judgments, terminal
+state, result disposition, incomplete package, resume information, and exact
+Run reference. It does not repair the attempt, perform adoption or publication,
+or select the next Goal. Such effects exist only when they were authorized Plan
+operations.
+
+Finish is internal reconciliation and closing judgment. It may preserve or
+consume independent audit evidence, but its own report is not an independent
+external audit merely because the full trace is available.
+
+The Finish Account is a legal predecessor for the next Observe. That Observe
+may add external changes that occurred before, during, or after the Run and may
+then expose a later Goal candidate.
+
+## Five responsibilities, four storage strategies
+
+Observe and Finish share one content-addressed Account core:
+
+- subject and observation boundary;
+- evidence cutoff and complete source references;
+- evidence delta;
+- the full current item set with retained, changed, and added impact;
+- explicitly retired predecessor items;
+- exact predecessor identity when one exists.
+
+Finish alone adds the closing stage report. Observe alone adds the opening gap
+and opportunity report and may expose Goal candidates. Their common core makes
+the terminal situation directly continuable without pretending that opening
+inventory and closing reconciliation are the same operation.
+
+| Responsibility | Storage strategy | Stage-specific role | Change rule |
+| --- | --- | --- | --- |
+| Observe | full Account | opening inventory plus gap/opportunity report | create a new Account iteration |
+| Goal | flat mandate | acceptance, budget, resources, authority, controls and stop-loss | create a new single-use contract |
+| Plan | operation DAG | dependencies, assignment, permitted concurrency and recovery | create a new single-use graph |
+| Run | journal plus derived projection | actual operation and halt facts | append one event |
+| Finish | full Account | closing reconciliation plus stage report | create once from one halted Run |
+
+Each responsibility retains evidence for its own claims and the next boundary.
+Together the Account, mandate, DAG, journal, closure, exact bindings, and stable
+object evidence form an audit trail. They are evidence available to an
+independent external audit; their existence does not perform that audit.
 
 Open-ended generation supplies semantic candidates. Deterministic mechanisms
 validate contracts, bind exact predecessors, generate identities and ordering,
-write stable bytes, and refuse invalid state transitions. Mechanical success
-does not prove that evidence is true, a Goal is wise, or a Plan is sufficient.
-
-Completion of a Run does not itself adopt, publish, or make its outputs
-authoritative. Those effects require their own owner, authority, and operation.
+write stable bytes, and refuse invalid transitions. Mechanical success proves
+only those declared relations. It does not prove evidence truth, Goal wisdom,
+Plan sufficiency, external authorization, or result adoption.

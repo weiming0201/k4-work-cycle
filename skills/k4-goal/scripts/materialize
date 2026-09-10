@@ -7,18 +7,18 @@ tool=${K4_STABLE_RESULT:-}
 
 if [ "${1:-}" = "--help" ]; then
     printf '%s\n' \
-        'Usage: materialize --input FILE --output FILE --bind align=FILE' \
+        'Usage: materialize --input FILE --output FILE --bind observe=FILE' \
         '' \
-        'Create one immutable Goal from temporary semantic JSON and one exact Align.' \
+        'Create one immutable Goal from temporary semantic JSON and one exact Observe Account.' \
         '' \
         'Options:' \
         '  --input FILE       JSON object with the semantic fields below' \
         '  --output FILE      absent output path whose parent already exists' \
-        '  --bind align=FILE  exact predecessor Align' \
+        '  --bind observe=FILE  exact current Observe Account' \
         '' \
         'Semantic input:' \
         '  objective, target: nonempty strings' \
-        '  align_item_ids, source_refs, baseline_refs, scope: nonempty unique string arrays' \
+        '  observe_item_ids, source_refs, baseline_refs, scope: nonempty unique string arrays' \
         '  non_goals: unique string array; may be empty' \
         '  evidence_cutoff: {at: nonempty string, included_refs: nonempty unique string array}' \
         '  execution_envelope: {authorization_ref, authorization_scope,' \

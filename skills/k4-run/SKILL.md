@@ -1,72 +1,43 @@
 ---
 name: k4-run
-description: Execute only one exact Goal and Plan by appending actual operation, acceptance, control, and stop events to a chained ledger and mechanically projecting current state. Use after k4-plan; do not replan, widen authority, overwrite events, adopt output, or choose the next Goal.
+description: Execute one exact Goal and Plan by appending actual operation and halt facts to a chained ledger and mechanically projecting current execution state. Use after k4-plan; do not judge terminal acceptance, replan, widen authority, adopt output, or choose the next Goal.
 ---
 
 # K4 Run
 
-Use this Skill only to execute the frozen Plan and record what actually happens.
+Use this Skill only to perform the frozen Plan and record what actually happens.
 
 ## Boundary
 
-- First locate one exact frozen Goal and its exact executable Plan. If either
-  is absent, ambiguous, or not mutually bound, stop and route to the earliest
-  missing predecessor; do not execute work.
-- Bind one exact frozen Goal and its exact executable Plan.
-- Before each operation, recheck the Plan dependencies, Tool, readable and
-  writable positions, permissions, resources, checks, budget, effects, and
-  applicable controls.
-- Append one event for one actual operation result, acceptance judgment,
-  terminal-control judgment, or stop. Operation events carry every invariant
-  control check required for that operation.
-- Record every potential unresolved issue in that operation's
-  `deferred_issues`; do not investigate, repair, prioritize, route, or act on
-  it inside the current Run.
-- Treat the event ledger as history and the projection as reconstructible
-  current state. Never edit an event or treat a projection as history.
-- Stop when the Plan cannot govern the next action. Do not silently change the
-  route, Tool, dependency, path, Goal, or authorization.
+- Require one exact frozen Goal and its exact executable Plan; otherwise return
+  to the earliest missing predecessor without starting Run.
+- Before each operation recheck dependencies, tool, paths, permissions,
+  resources, checks, budget, effects, and invariant controls.
+- Attempt only one eligible Plan operation per increment and append its actual
+  result, outputs, evidence, trace, invariant observations, and deferred issues.
+- Append one halt event when no next operation will be attempted. Preserve the
+  actual halt position, trigger, budget/effect evidence, and resume evidence.
+- Never edit an event. A projection is reconstructible state, not history.
+- Do not judge Goal acceptance or terminal controls, declare overall completion,
+  repair, replan, widen scope, adopt, or choose a next Goal.
 
 ## Form one semantic event
 
-After exactly one governed increment, form exactly one event:
+After one governed operation, describe its Plan identity, eligibility, actual
+outputs, evidence, trace, result, every mapped invariant-control observation,
+and all deferred issues. An out-of-scope issue is recorded but not investigated
+or acted on. A drift affecting the operation prevents a passing result.
 
-- an operation result identifies the Plan operation, eligibility, actual
-  outputs, evidence, trace, result, every applicable invariant-control check,
-  and all deferred Findings or unknowns;
-- an acceptance result identifies one Goal point and records actual value,
-  comparison, evidence, and bounded judgment;
-- a terminal-control result records the same for one terminal control;
-- a stop records the actual completed, paused, failed, or cancelled state,
-  budget and side-effect evidence, and a resume point unless completed.
-
-Do not append `not-run`; it is derived from absence. An operation can pass only
-after its dependencies pass and its required evidence and invariant checks are
-present. Acceptance can pass only after its mapped operations pass. Append no
-event after stop.
+When execution stops, append a halt with actual position, trigger, observed
+budget and effects, evidence, and available resume reference. Halt is an
+execution fact; Finish determines the attempt's terminal judgment.
 
 ## Append and project
 
-Before authoring an event input, run `scripts/append --help` and use its output as the only field vocabulary.
+Run `scripts/append --help` before authoring each temporary event. Append it
+through the script with exact Goal and Plan bindings. Use `scripts/project` to
+create an absent derived view from the complete ledger.
 
-Write one temporary semantic event input after the corresponding action or
-judgment, then invoke:
-
-```text
-scripts/append --input <event-input.json> --log <run.jsonl> --bind goal=<goal.json> --bind plan=<plan.json>
-```
-
-Generate a current derived view at an absent path with:
-
-```text
-scripts/project --log <run.jsonl> --output <absent-projection.json> --bind goal=<goal.json> --bind plan=<plan.json>
-```
-
-The shared Tool creates sequence, time, predecessor and content identities,
-locks and appends the ledger, and invokes this Skill's CUE contract. Do not
-hand-author, patch, reorder, truncate, or replace stable Run events.
-
-Do not read `assets/protocol.cue`, the shared Tool, or other implementation
-source before or during normal use. If append or projection refuses the input,
-correct the stated semantic omission or contradiction from its error and this
-Skill; do not reverse-engineer the mechanical contract.
+Do not hand-author, patch, reorder, truncate, or replace stable events.
+Ordinary use does not require reading the CUE contract or Tool source. Correct
+named public omissions or contradictions; do not bypass the contract.
