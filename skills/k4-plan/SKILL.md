@@ -10,7 +10,8 @@ Freeze the task-specific control flow that Run will consume.
 ## Boundary
 
 - Require one exact frozen Goal; otherwise return to `k4-goal`.
-- Select tools only from the Goal's frozen available set.
+- Keep every tool, permission, read/write position, resource, and maximum
+  effect inside the Goal's frozen execution envelope.
 - Search, inspect, and compare alternatives as needed within the Goal boundary.
 - For a complex Goal, compare two or three materially different candidate DAGs
   when that comparison improves selection; freeze only the selected Plan and a
@@ -24,10 +25,11 @@ Freeze the task-specific control flow that Run will consume.
 
 ## Stable result
 
-The selected Plan fixes the entry, operation graph, Goal coverage, available
-tools, read/write positions, permissions, resources, maximum effects, checks,
-and both result edges. All graph edges move forward in topological order. A
-change to those decisions requires a new Plan.
+The selected Plan fixes the entry, operation graph, Goal coverage, tools,
+read/write positions, permissions, resources, maximum effects, checks, and
+both result edges. Every operational boundary is a subset of the Goal envelope.
+All graph edges move forward in topological order. A change to those decisions
+requires a new Plan.
 
 ## Materialize
 

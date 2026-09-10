@@ -42,6 +42,7 @@ context: _
 })
 #Judge: close({
 	kind:        "self" | "independent-agent" | "script" | "human"
+	ref:         #Text
 	claim_limit: #Text
 })
 #Acceptance: close({
@@ -94,6 +95,9 @@ context: _
 	authorization_scope:       #Text
 	authorization_claim_limit: #Text
 	available_tools:           #NonEmptyStrings
+	permission_refs:           #NonEmptyStrings
+	read_refs:                 #NonEmptyStrings
+	write_refs:                #NonEmptyStrings
 	resources:                 #NonEmptyStrings
 	budget:                    #Text
 	maximum_side_effects:      #NonEmptyStrings
@@ -136,7 +140,7 @@ context: _
 	status:   "frozen" | "not-frozen"
 })
 #Envelope: close({
-	schema:            "k4-goal-document/v5"
+	schema:            "k4-goal-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({observe: #Binding})
@@ -147,15 +151,24 @@ _input:             #Input & context.input
 _observe:           #BoundObserve & context.bindings.observe
 _observeCandidates: _observe.value.document.observation.goal_candidate_ids
 for id in _input.observe_item_ids {
-	if !list.Contains(_observeCandidates, id) {_invalid: _|_}
+	if !list.Contains(_observeCandidates, id) {_invalid: error("observe_item_ids: every selected item must be a current Observe goal candidate")}
 }
 _generateChecks: {
 	_pointIDsUnique:   list.UniqueItems(_pointIDs) & true
 	_controlIDsUnique: list.UniqueItems(_controlIDs) & true
 	for id in _input.observe_item_ids {
-		if !list.Contains(_observeCandidates, id) {_invalid: _|_}
+		if !list.Contains(_observeCandidates, id) {_invalid: error("observe_item_ids: every selected item must be a current Observe goal candidate")}
 	}
-	if _status == "frozen" && len(_points) == 0 {_invalid: _|_}
+	if _status == "frozen" && len(_points) == 0 {_invalid: error("acceptance_points: a frozen Goal requires at least one acceptance point")}
+	for judge in list.Concat([
+		[for point in _input.acceptance_points {point.judge}],
+		[for control in _input.control_contracts {control.judge}],
+	]) {
+		if judge.kind == "self" && !list.Contains(_input.source_refs, judge.ref) {_invalid: error("judge.ref: a self judge must be sourceable from Goal source_refs")}
+		if judge.kind == "independent-agent" && !list.Contains(_input.source_refs, judge.ref) {_invalid: error("judge.ref: an independent-agent judge must be sourceable from Goal source_refs")}
+		if judge.kind == "script" && !list.Contains(_input.execution_envelope.available_tools, judge.ref) {_invalid: error("judge.ref: a script judge must be one of execution_envelope.available_tools")}
+		if judge.kind == "human" && judge.ref != _input.execution_envelope.authorization_ref {_invalid: error("judge.ref: a human judge must equal execution_envelope.authorization_ref")}
+	}
 }
 
 _points: [for point in _input.acceptance_points {
@@ -207,7 +220,7 @@ _document: #Document & {
 }
 
 generate: _generateChecks & close({
-	schema: "k4-goal-document/v5"
+	schema: "k4-goal-document/v6"
 	bindings: close({observe: _observe.binding})
 	document: _document
 })
@@ -216,23 +229,32 @@ _existing: #Envelope & context.existing & {
 	bindings: close({observe: _observe.binding})
 }
 for id in _existing.document.observe_item_ids {
-	if !list.Contains(_observeCandidates, id) {_invalid: _|_}
+	if !list.Contains(_observeCandidates, id) {_invalid: error("observe_item_ids: every selected item must be a current Observe goal candidate")}
 }
 _validateChecks: {
 	_pointIDsUnique:   list.UniqueItems(_existingPointIDs) & true
 	_controlIDsUnique: list.UniqueItems(_existingControlIDs) & true
 	for id in _existing.document.observe_item_ids {
-		if !list.Contains(_observeCandidates, id) {_invalid: _|_}
+		if !list.Contains(_observeCandidates, id) {_invalid: error("observe_item_ids: every selected item must be a current Observe goal candidate")}
 	}
 	for index, point in _existing.document.acceptance_points {
-		if point.point_id != _expectedExistingPointIDs[index] {_invalid: _|_}
+		if point.point_id != _expectedExistingPointIDs[index] {_invalid: error("acceptance_points.point_id: identity must match the point semantic content")}
 	}
 	for index, control in _existing.document.control_contracts {
-		if control.control_id != _expectedExistingControlIDs[index] {_invalid: _|_}
+		if control.control_id != _expectedExistingControlIDs[index] {_invalid: error("control_contracts.control_id: identity must match the control semantic content")}
 	}
-	if len(_existing.document.blockers) > 0 && _existing.document.status != "not-frozen" {_invalid: _|_}
-	if len(_existing.document.blockers) == 0 && _existing.document.status != "frozen" {_invalid: _|_}
-	if _existing.document.status == "frozen" && len(_existing.document.acceptance_points) == 0 {_invalid: _|_}
+	if len(_existing.document.blockers) > 0 && _existing.document.status != "not-frozen" {_invalid: error("status: blockers require not-frozen")}
+	if len(_existing.document.blockers) == 0 && _existing.document.status != "frozen" {_invalid: error("status: an unblocked Goal must be frozen")}
+	if _existing.document.status == "frozen" && len(_existing.document.acceptance_points) == 0 {_invalid: error("acceptance_points: a frozen Goal requires at least one acceptance point")}
+	for judge in list.Concat([
+		[for point in _existing.document.acceptance_points {point.judge}],
+		[for control in _existing.document.control_contracts {control.judge}],
+	]) {
+		if judge.kind == "self" && !list.Contains(_existing.document.source_refs, judge.ref) {_invalid: error("judge.ref: a self judge must be sourceable from Goal source_refs")}
+		if judge.kind == "independent-agent" && !list.Contains(_existing.document.source_refs, judge.ref) {_invalid: error("judge.ref: an independent-agent judge must be sourceable from Goal source_refs")}
+		if judge.kind == "script" && !list.Contains(_existing.document.execution_envelope.available_tools, judge.ref) {_invalid: error("judge.ref: a script judge must be one of execution_envelope.available_tools")}
+		if judge.kind == "human" && judge.ref != _existing.document.execution_envelope.authorization_ref {_invalid: error("judge.ref: a human judge must equal execution_envelope.authorization_ref")}
+	}
 }
 _existingPointIDs: [for point in _existing.document.acceptance_points {point.point_id}]
 _expectedExistingPointIDs: [for point in _existing.document.acceptance_points {

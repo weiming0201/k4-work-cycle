@@ -12,7 +12,8 @@ The Resource publishes:
 3. one stage-neutral deterministic Tool;
 4. one Skill-local CUE contract per Skill;
 5. one generated Manifest;
-6. one isolated conformance suite.
+6. one explicit prior-version migration Tool;
+7. one isolated conformance suite.
 
 The Skills are peers. Consumption order creates neither actor hierarchy nor
 ownership. This release adds no daemon, task manager, provider, permanent role,
@@ -36,21 +37,28 @@ The shared Tool has no stage vocabulary. It provides only:
 
 The Tool owns canonical JSON, generated time, content and file digests, event
 sequence and predecessor digest, exclusive creation, append locking, flushing,
-and failure-before-write. CUE owns the meaning of accepted data.
+and failure-before-write. CUE owns the meaning of accepted data. The separate,
+version-specific migration Tool consumes a complete `0.4.1` chain and an
+explicit policy for fields that cannot be inferred; it then calls the current
+public entrypoints to re-materialize a `0.5.0` chain.
 
 ## 3. Five unequal contracts
 
 - Observe accepts a null predecessor or one exact Observe/Finish Account. It
   preserves Account continuity and generates the lens index and opening report.
 - Goal accepts one exact Observe Account and freezes one selected flat mandate,
-  including its selection rationale.
+  including its selection rationale, exact execution envelope, and sourceable
+  judge identities.
 - Plan accepts one exact frozen Goal and freezes one selected forward binary
   operation DAG, including its selection rationale and topology projection.
+  Every operational permission, position, resource, tool, and maximum effect
+  is mechanically contained by the Goal envelope.
 - Run accepts one exact Goal, Plan, existing ledger, and candidate event. It
   validates graph activation and appends only operation, patch, or halt facts.
 - Finish accepts the exact opening Account, Goal, Plan, and halted Run ledger.
   The Tool derives its Run projection, then derives the settlement report and
-  materializes the next Account.
+  materializes the next Account. Its judgments identify the exact judges
+  frozen by Goal.
 
 Every binding includes the referenced schema, raw-file digest, and semantic
 content digest. It proves the exact consumed bytes, not their truth or a
@@ -87,6 +95,8 @@ edge. Findings and unknowns are event annotations. At most one emergency patch
 may precede an activated operation response, and its verification scope is
 fixed to mainline resumption. The projection retains every Plan operation as
 `pass`, `fail`, or `not-run` while the journal remains the only process history.
+Patch tools, permissions, read/write positions, resources, and maximum effects
+remain inside the Goal envelope rather than widening it at runtime.
 
 ## 6. Stable and temporary state
 
@@ -99,6 +109,10 @@ Tool and are never hand-patched.
 Semantic content identity excludes generated time but includes exact bindings.
 File identity includes all canonical bytes. A rejected input remains temporary
 input plus its diagnostic; it never becomes a partial stable result.
+
+Migration does not preserve a content digest by assertion. It preserves the
+source artifacts, records their file digests, obtains explicit values for new
+semantic obligations, and generates new artifacts and a new Run hash chain.
 
 ## 7. Diagnostics and lazy CUE
 
@@ -129,11 +143,16 @@ The isolated suite exercises one complete cycle, including:
 
 - multi-lens Observe bootstrap and Finish-to-Observe continuity;
 - a frozen Goal that retains an unknown annotation;
+- rejection of a frozen Goal without acceptance and of an unavailable judge;
 - forward binary Plan routing with fork and join projections;
+- six-family Goal-envelope containment for Plan operations and emergency patches;
 - Run activation, one emergency patch, patch refusal on repetition, binary
   results, halt, and projection;
 - Finish settlement in which a failed operation is recovered by the frozen
   route and the Goal still passes;
+- Finish rejection of an actual judge that differs from Goal;
+- legal zero-control and zero-patch settlement;
+- full `0.4.1` to `0.5.0` chain migration with explicit digest transitions;
 - refusal of a Plan back edge and an unactivated Run operation.
 
 Passing proves only these mechanical contracts. It does not prove evidence

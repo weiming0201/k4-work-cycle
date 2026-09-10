@@ -38,18 +38,27 @@ context: _
 	...
 }
 #GoalEnvelope: {
-	schema:            "k4-goal-document/v5"
+	schema:            "k4-goal-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
 	document: {
 		status: "frozen"
+		execution_envelope: {
+			available_tools:      #NonEmptyStrings
+			permission_refs:      #NonEmptyStrings
+			read_refs:            #NonEmptyStrings
+			write_refs:           #NonEmptyStrings
+			resources:            #NonEmptyStrings
+			maximum_side_effects: #NonEmptyStrings
+			...
+		}
 		control_contracts: [...#GoalControl]
 		...
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v5"
+	schema:            "k4-plan-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding}
@@ -102,8 +111,10 @@ context: _
 	reason:                  #Text
 	script_ref:              #Text
 	tool_refs:               #NonEmptyStrings
+	permission_refs:         #NonEmptyStrings
 	read_refs:               #Strings
 	write_refs:              #NonEmptyStrings
+	resource_refs:           #NonEmptyStrings
 	maximum_side_effects:    #NonEmptyStrings
 	actual_side_effect_refs: #NonEmptyStrings
 	trace_refs:              #NonEmptyStrings
@@ -123,7 +134,7 @@ context: _
 })
 #Event: #OperationEvent | #PatchEvent | #HaltEvent
 #EventEnvelope: close({
-	schema:                "k4-run-event/v4"
+	schema:                "k4-run-event/v5"
 	sequence:              uint
 	recorded_unix_ms:      uint
 	previous_event_sha256: null | #Digest
@@ -144,6 +155,12 @@ _controlTiming: {for control in _goal.value.document.control_contracts {
 }}
 _planControlIDs: [for entry in _plan.value.document.coverage.controls {entry.control_id}]
 _goalControlIDs: [for control in _goal.value.document.control_contracts {control.control_id}]
+_availableTools:       _goal.value.document.execution_envelope.available_tools
+_availablePermissions: _goal.value.document.execution_envelope.permission_refs
+_availableReads:       _goal.value.document.execution_envelope.read_refs
+_availableWrites:      _goal.value.document.execution_envelope.write_refs
+_availableResources:   _goal.value.document.execution_envelope.resources
+_availableEffects:     _goal.value.document.execution_envelope.maximum_side_effects
 _planChecks: {
 	_entryIDsUnique: list.UniqueItems(_plan.value.document.entry_operation_ids) & true
 	for operationID in _plan.value.document.entry_operation_ids {
@@ -235,6 +252,12 @@ _publicLedgerChecks: {
 				if len([for prior in _events if prior.sequence < envelope.sequence if prior.event.kind == "operation-result" if prior.event.operation_id == dependency {prior}]) != 1 {_invalid: error("emergency patch requires all Plan dependencies to have responses")}
 			}
 		}
+		for ref in envelope.event.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("emergency-patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("emergency-patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("emergency-patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("emergency-patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("emergency-patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+		for effect in envelope.event.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("emergency-patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	}
 	if len(_haltEvents) == 1 {
 		if len(_operationEvents) == 0 && _haltEvents[0].event.after_operation_id != null {_invalid: error("halt position must follow the last Run operation response")}
@@ -275,6 +298,12 @@ _publicCandidateChecks: {
 				if len([for prior in _operationEvents if prior.event.operation_id == dependency {prior}]) != 1 {_invalid: error("emergency patch requires all Plan dependencies to have responses")}
 			}
 		}
+		for ref in _input.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("emergency-patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
+		for ref in _input.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("emergency-patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+		for ref in _input.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("emergency-patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
+		for ref in _input.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("emergency-patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
+		for ref in _input.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("emergency-patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+		for effect in _input.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("emergency-patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	}
 	if _input.kind == "halt" {
 		if len(_operationEvents) == 0 && _input.after_operation_id != null {_invalid: error("halt position must follow the last Run operation response")}
@@ -309,8 +338,10 @@ if _input.kind == "emergency-patch" {
 		reason:                  _input.reason
 		script_ref:              _input.script_ref
 		tool_refs:               _input.tool_refs
+		permission_refs:         _input.permission_refs
 		read_refs:               _input.read_refs
 		write_refs:              _input.write_refs
+		resource_refs:           _input.resource_refs
 		maximum_side_effects:    _input.maximum_side_effects
 		actual_side_effect_refs: _input.actual_side_effect_refs
 		trace_refs:              _input.trace_refs
@@ -333,7 +364,7 @@ if _input.kind == "halt" {
 }
 
 next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
-	schema:   "k4-run-event/v4"
+	schema:   "k4-run-event/v5"
 	bindings: _bindings
 	event:    _generatedEvent
 })
@@ -370,8 +401,10 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 	reason:                  #Text
 	script_ref:              #Text
 	tool_refs:               #NonEmptyStrings
+	permission_refs:         #NonEmptyStrings
 	read_refs:               #Strings
 	write_refs:              #NonEmptyStrings
+	resource_refs:           #NonEmptyStrings
 	maximum_side_effects:    #NonEmptyStrings
 	actual_side_effect_refs: #NonEmptyStrings
 	trace_refs:              #NonEmptyStrings
@@ -416,8 +449,10 @@ _patchProjection: [for envelope in _patchEvents {close({
 	reason:                  envelope.event.reason
 	script_ref:              envelope.event.script_ref
 	tool_refs:               envelope.event.tool_refs
+	permission_refs:         envelope.event.permission_refs
 	read_refs:               envelope.event.read_refs
 	write_refs:              envelope.event.write_refs
+	resource_refs:           envelope.event.resource_refs
 	maximum_side_effects:    envelope.event.maximum_side_effects
 	actual_side_effect_refs: envelope.event.actual_side_effect_refs
 	trace_refs:              envelope.event.trace_refs
@@ -488,7 +523,7 @@ if len(_events) > 0 {
 }
 
 project: _planChecks & _publicLedgerChecks & close({
-	schema:   "k4-run-projection/v4"
+	schema:   "k4-run-projection/v5"
 	bindings: _bindings
 	document: close({
 		operations:                _operationProjection
@@ -505,7 +540,7 @@ project: _planChecks & _publicLedgerChecks & close({
 })
 
 _existingProjection: context.existing & {
-	schema:            "k4-run-projection/v4"
+	schema:            "k4-run-projection/v5"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings:          _bindings

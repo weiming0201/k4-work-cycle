@@ -92,7 +92,7 @@ context: _
 	document: #Document
 })
 #PreviousEnvelope: {
-	schema:            "k4-observe-document/v2" | "k4-finish-document/v2"
+	schema:            "k4-observe-document/v2" | "k4-finish-document/v3"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -121,11 +121,11 @@ _input:    #Input & context.input
 _previous: #Previous & context.bindings.previous_account
 _bindings: close({previous_account: null | #Binding})
 if _previous.value == null {
-	if _previous.binding != null {_invalid: _|_}
+	if _previous.binding != null {_invalid: error("contract relation rejected: _previous.binding != null")}
 	_bindings: previous_account: null
 }
 if _previous.value != null {
-	if _previous.binding == null {_invalid: _|_}
+	if _previous.binding == null {_invalid: error("contract relation rejected: _previous.binding == null")}
 	_bindings: previous_account: _previous.binding
 }
 
@@ -169,42 +169,42 @@ if _previous.value != null {_revision: _previous.value.document.account.revision
 _generateChecks: {
 	_itemIDsUnique: list.UniqueItems(_itemIDs) & true
 	for item in _generatedItems {
-		if !list.Contains(_input.lenses, item.lens) {_invalid: _|_}
-		if item.route == "external" && item.route_ref == null {_invalid: _|_}
-		if item.route != "external" && item.route_ref != null {_invalid: _|_}
+		if !list.Contains(_input.lenses, item.lens) {_invalid: error("contract relation rejected: !list.Contains(_input.lenses, item.lens)")}
+		if item.route == "external" && item.route_ref == null {_invalid: error("contract relation rejected: item.route == \"external\" && item.route_ref == null")}
+		if item.route != "external" && item.route_ref != null {_invalid: error("contract relation rejected: item.route != \"external\" && item.route_ref != null")}
 		for ref in item.evidence_refs {
-			if !list.Contains(_input.source_refs, ref) {_invalid: _|_}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 		}
 		if item.change != "retained" {
-			if len([for ref in item.evidence_refs if list.Contains(_input.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: _|_}
+			if len([for ref in item.evidence_refs if list.Contains(_input.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: error("contract relation rejected: len([for ref in item.evidence_refs if list.Contains(_input.delta.evidence_refs, ref) {ref}]) == 0")}
 		}
 	}
 	for lens in _input.lenses {
-		if len([for item in _generatedItems if item.lens == lens {item}]) == 0 {_invalid: _|_}
+		if len([for item in _generatedItems if item.lens == lens {item}]) == 0 {_invalid: error("contract relation rejected: len([for item in _generatedItems if item.lens == lens {item}]) == 0")}
 	}
 	for retired in _input.retired {
 		for ref in retired.evidence_refs {
-			if !list.Contains(_input.source_refs, ref) {_invalid: _|_}
-			if !list.Contains(_input.delta.evidence_refs, ref) {_invalid: _|_}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
+			if !list.Contains(_input.delta.evidence_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.delta.evidence_refs, ref)")}
 		}
 	}
 	for ref in _input.source_refs {
-		if !list.Contains(_allEvidence, ref) {_invalid: _|_}
+		if !list.Contains(_allEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_allEvidence, ref)")}
 	}
 	for ref in _input.delta.evidence_refs {
-		if !list.Contains(_input.source_refs, ref) {_invalid: _|_}
-		if !list.Contains(_changeEvidence, ref) {_invalid: _|_}
+		if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
+		if !list.Contains(_changeEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_changeEvidence, ref)")}
 	}
 	if _previous.value == null {
-		if _input.mode != "bootstrap" {_invalid: _|_}
-		if len(_input.retired) != 0 {_invalid: _|_}
+		if _input.mode != "bootstrap" {_invalid: error("contract relation rejected: _input.mode != \"bootstrap\"")}
+		if len(_input.retired) != 0 {_invalid: error("contract relation rejected: len(_input.retired) != 0")}
 		for item in _generatedItems {
-			if item.change != "added" {_invalid: _|_}
-			if item.previous_item_id != null {_invalid: _|_}
+			if item.change != "added" {_invalid: error("contract relation rejected: item.change != \"added\"")}
+			if item.previous_item_id != null {_invalid: error("contract relation rejected: item.previous_item_id != null")}
 		}
 	}
 	if _previous.value != null {
-		if _input.mode != "iterate" {_invalid: _|_}
+		if _input.mode != "iterate" {_invalid: error("contract relation rejected: _input.mode != \"iterate\"")}
 		if _input.subject != _previous.value.document.account.subject {_invalid: error("semantic input subject must equal the previous Account subject for iterate; use bootstrap for a new subject")}
 		if _input.boundary != _previous.value.document.account.boundary {_invalid: error("semantic input boundary must equal the previous Account boundary for iterate; use bootstrap for a new boundary")}
 		_previousIDs: [for item in _previous.value.document.account.items {item.item_id}]
@@ -213,21 +213,21 @@ _generateChecks: {
 			[for item in _input.retired {item.previous_item_id}],
 		])
 		_usedPreviousUnique: list.UniqueItems(_usedPrevious) & true
-		if len(_usedPrevious) != len(_previousIDs) {_invalid: _|_}
+		if len(_usedPrevious) != len(_previousIDs) {_invalid: error("contract relation rejected: len(_usedPrevious) != len(_previousIDs)")}
 		for previousID in _previousIDs {
-			if !list.Contains(_usedPrevious, previousID) {_invalid: _|_}
+			if !list.Contains(_usedPrevious, previousID) {_invalid: error("contract relation rejected: !list.Contains(_usedPrevious, previousID)")}
 		}
 		for item in _generatedItems {
-			if item.change == "added" && item.previous_item_id != null {_invalid: _|_}
-			if item.change != "added" && item.previous_item_id == null {_invalid: _|_}
+			if item.change == "added" && item.previous_item_id != null {_invalid: error("contract relation rejected: item.change == \"added\" && item.previous_item_id != null")}
+			if item.change != "added" && item.previous_item_id == null {_invalid: error("contract relation rejected: item.change != \"added\" && item.previous_item_id == null")}
 			if item.previous_item_id != null {
-				if !list.Contains(_previousIDs, item.previous_item_id) {_invalid: _|_}
-				if item.change == "retained" && item.item_id != item.previous_item_id {_invalid: _|_}
-				if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: _|_}
+				if !list.Contains(_previousIDs, item.previous_item_id) {_invalid: error("contract relation rejected: !list.Contains(_previousIDs, item.previous_item_id)")}
+				if item.change == "retained" && item.item_id != item.previous_item_id {_invalid: error("contract relation rejected: item.change == \"retained\" && item.item_id != item.previous_item_id")}
+				if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: error("contract relation rejected: item.change == \"changed\" && item.item_id == item.previous_item_id")}
 			}
 		}
 		for retired in _input.retired {
-			if !list.Contains(_previousIDs, retired.previous_item_id) {_invalid: _|_}
+			if !list.Contains(_previousIDs, retired.previous_item_id) {_invalid: error("contract relation rejected: !list.Contains(_previousIDs, retired.previous_item_id)")}
 		}
 	}
 }
@@ -299,49 +299,49 @@ _existingChangeEvidence: list.Concat(list.Concat([
 _validateChecks: {
 	_idsUnique: list.UniqueItems(_existingIDs) & true
 	for index, item in _existing.document.account.items {
-		if item.item_id != _expectedExistingIDs[index] {_invalid: _|_}
-		if !list.Contains(_existing.document.account.lenses, item.lens) {_invalid: _|_}
-		if item.route == "external" && item.route_ref == null {_invalid: _|_}
-		if item.route != "external" && item.route_ref != null {_invalid: _|_}
+		if item.item_id != _expectedExistingIDs[index] {_invalid: error("contract relation rejected: item.item_id != _expectedExistingIDs[index]")}
+		if !list.Contains(_existing.document.account.lenses, item.lens) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.lenses, item.lens)")}
+		if item.route == "external" && item.route_ref == null {_invalid: error("contract relation rejected: item.route == \"external\" && item.route_ref == null")}
+		if item.route != "external" && item.route_ref != null {_invalid: error("contract relation rejected: item.route != \"external\" && item.route_ref != null")}
 		for ref in item.evidence_refs {
-			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: _|_}
+			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 		}
 		if item.change != "retained" {
-			if len([for ref in item.evidence_refs if list.Contains(_existing.document.account.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: _|_}
+			if len([for ref in item.evidence_refs if list.Contains(_existing.document.account.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: error("contract relation rejected: len([for ref in item.evidence_refs if list.Contains(_existing.document.account.delta.evidence_refs, ref) {ref}]) == 0")}
 		}
 	}
 	for lens in _existing.document.account.lenses {
-		if len([for item in _existing.document.account.items if item.lens == lens {item}]) == 0 {_invalid: _|_}
+		if len([for item in _existing.document.account.items if item.lens == lens {item}]) == 0 {_invalid: error("contract relation rejected: len([for item in _existing.document.account.items if item.lens == lens {item}]) == 0")}
 	}
 	for retired in _existing.document.account.retired {
 		for ref in retired.evidence_refs {
-			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: _|_}
-			if !list.Contains(_existing.document.account.delta.evidence_refs, ref) {_invalid: _|_}
+			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
+			if !list.Contains(_existing.document.account.delta.evidence_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.delta.evidence_refs, ref)")}
 		}
 	}
 	for ref in _existing.document.account.source_refs {
-		if !list.Contains(_existingEvidence, ref) {_invalid: _|_}
+		if !list.Contains(_existingEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_existingEvidence, ref)")}
 	}
 	for ref in _existing.document.account.delta.evidence_refs {
-		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: _|_}
-		if !list.Contains(_existingChangeEvidence, ref) {_invalid: _|_}
+		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
+		if !list.Contains(_existingChangeEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_existingChangeEvidence, ref)")}
 	}
-	if _existing.document.observation.goal_candidate_ids != _expectedCandidates {_invalid: _|_}
-	if _existing.document.account.lens_index != _expectedLensIndex {_invalid: _|_}
-	if len(_existingOpen) > 0 && _existing.document.observation.status != "open" {_invalid: _|_}
-	if len(_existingOpen) == 0 && _existing.document.observation.status != "aligned" {_invalid: _|_}
+	if _existing.document.observation.goal_candidate_ids != _expectedCandidates {_invalid: error("contract relation rejected: _existing.document.observation.goal_candidate_ids != _expectedCandidates")}
+	if _existing.document.account.lens_index != _expectedLensIndex {_invalid: error("contract relation rejected: _existing.document.account.lens_index != _expectedLensIndex")}
+	if len(_existingOpen) > 0 && _existing.document.observation.status != "open" {_invalid: error("contract relation rejected: len(_existingOpen) > 0 && _existing.document.observation.status != \"open\"")}
+	if len(_existingOpen) == 0 && _existing.document.observation.status != "aligned" {_invalid: error("contract relation rejected: len(_existingOpen) == 0 && _existing.document.observation.status != \"aligned\"")}
 	if _previous.value == null {
-		if _existing.document.account.revision != 0 {_invalid: _|_}
-		if _existing.document.observation.mode != "bootstrap" {_invalid: _|_}
-		if len(_existing.document.account.retired) != 0 {_invalid: _|_}
+		if _existing.document.account.revision != 0 {_invalid: error("contract relation rejected: _existing.document.account.revision != 0")}
+		if _existing.document.observation.mode != "bootstrap" {_invalid: error("contract relation rejected: _existing.document.observation.mode != \"bootstrap\"")}
+		if len(_existing.document.account.retired) != 0 {_invalid: error("contract relation rejected: len(_existing.document.account.retired) != 0")}
 		for item in _existing.document.account.items {
-			if item.change != "added" {_invalid: _|_}
-			if item.previous_item_id != null {_invalid: _|_}
+			if item.change != "added" {_invalid: error("contract relation rejected: item.change != \"added\"")}
+			if item.previous_item_id != null {_invalid: error("contract relation rejected: item.previous_item_id != null")}
 		}
 	}
 	if _previous.value != null {
-		if _existing.document.account.revision != _previous.value.document.account.revision+1 {_invalid: _|_}
-		if _existing.document.observation.mode != "iterate" {_invalid: _|_}
+		if _existing.document.account.revision != _previous.value.document.account.revision+1 {_invalid: error("contract relation rejected: _existing.document.account.revision != _previous.value.document.account.revision+1")}
+		if _existing.document.observation.mode != "iterate" {_invalid: error("contract relation rejected: _existing.document.observation.mode != \"iterate\"")}
 		if _existing.document.account.subject != _previous.value.document.account.subject {_invalid: error("document subject must equal the previous Account subject for iterate")}
 		if _existing.document.account.boundary != _previous.value.document.account.boundary {_invalid: error("document boundary must equal the previous Account boundary for iterate")}
 		_previousIDs: [for item in _previous.value.document.account.items {item.item_id}]
@@ -350,21 +350,21 @@ _validateChecks: {
 			[for item in _existing.document.account.retired {item.previous_item_id}],
 		])
 		_usedPreviousUnique: list.UniqueItems(_usedPrevious) & true
-		if len(_usedPrevious) != len(_previousIDs) {_invalid: _|_}
+		if len(_usedPrevious) != len(_previousIDs) {_invalid: error("contract relation rejected: len(_usedPrevious) != len(_previousIDs)")}
 		for previousID in _previousIDs {
-			if !list.Contains(_usedPrevious, previousID) {_invalid: _|_}
+			if !list.Contains(_usedPrevious, previousID) {_invalid: error("contract relation rejected: !list.Contains(_usedPrevious, previousID)")}
 		}
 		for item in _existing.document.account.items {
-			if item.change == "added" && item.previous_item_id != null {_invalid: _|_}
-			if item.change != "added" && item.previous_item_id == null {_invalid: _|_}
+			if item.change == "added" && item.previous_item_id != null {_invalid: error("contract relation rejected: item.change == \"added\" && item.previous_item_id != null")}
+			if item.change != "added" && item.previous_item_id == null {_invalid: error("contract relation rejected: item.change != \"added\" && item.previous_item_id == null")}
 			if item.previous_item_id != null {
-				if !list.Contains(_previousIDs, item.previous_item_id) {_invalid: _|_}
-				if item.change == "retained" && item.item_id != item.previous_item_id {_invalid: _|_}
-				if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: _|_}
+				if !list.Contains(_previousIDs, item.previous_item_id) {_invalid: error("contract relation rejected: !list.Contains(_previousIDs, item.previous_item_id)")}
+				if item.change == "retained" && item.item_id != item.previous_item_id {_invalid: error("contract relation rejected: item.change == \"retained\" && item.item_id != item.previous_item_id")}
+				if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: error("contract relation rejected: item.change == \"changed\" && item.item_id == item.previous_item_id")}
 			}
 		}
 		for retired in _existing.document.account.retired {
-			if !list.Contains(_previousIDs, retired.previous_item_id) {_invalid: _|_}
+			if !list.Contains(_previousIDs, retired.previous_item_id) {_invalid: error("contract relation rejected: !list.Contains(_previousIDs, retired.previous_item_id)")}
 		}
 	}
 }

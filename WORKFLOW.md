@@ -54,7 +54,9 @@ observed subject, or close an attempt.
 Goal binds one exact Observe Account and selects only explicit Goal candidates
 from it. It freezes the baseline, target, evidence cutoff, scope, acceptance
 points, bounded judges, available tools, authority, resources, budget, maximum
-effects, and execution controls for one attempt.
+effects, and execution controls for one attempt. The execution envelope names
+the exact available tools, permissions, readable and writable positions,
+resources, and maximum effects; later stages may narrow but not enlarge it.
 
 When useful, Goal formation may compare two or three materially different
 candidates. The stable result retains only the selected Goal and a concise
@@ -62,7 +64,8 @@ selection rationale. Rejected alternatives are generation process, not stable
 parallel mandates.
 
 Acceptance points define observable terminal differences and how they will be
-judged. Controls define execution variables, allowed domains, forbidden drift,
+judged. Every judge has a sourceable identity as well as a bounded kind and
+claim limit. Controls define execution variables, allowed domains, forbidden drift,
 required traces, methods, and check timing. Neither defines an operation.
 Unknowns remain annotations; only a blocker prevents freezing. A frozen Goal is
 immutable and single-use. Goal does not choose a route, form a graph, execute
@@ -91,8 +94,11 @@ the materialized graph is acyclic. Start, fork, join, and end are structural
 positions, not additional operation results.
 
 Plan turns the Goal's flat constraints into task-specific scheduling authority.
-It does not change the Goal, perform work, or record actual results. Findings
-and unknowns do not create new graph branches.
+Every operation's tool, permissions, read/write positions, resources, and
+maximum effects must be contained by the Goal execution envelope. An
+independent judge cannot also execute the operation serving the point or
+control it judges. Plan does not change the Goal, perform work, or record
+actual results. Findings and unknowns do not create new graph branches.
 
 ## 4. Run: append the actual journal
 
@@ -109,9 +115,11 @@ either binary result and has no routing authority.
 If a significant Plan omission prevents the active operation, Run may make at
 most one emergency patch attempt for that operation. The patch records its
 reason, script, tools, exact positions, maximum and actual effects, trace,
-application result, Findings, and unknowns. It is checked only far enough to
-resume the original operation; it receives no separate systematic test. The
-original operation is then retried and still produces `pass` or `fail`.
+application result, Findings, and unknowns. Its tools, permissions, positions,
+resources, and maximum effects remain inside the Goal envelope. It is checked
+only far enough to resume the original operation; it receives no separate
+systematic test. The original operation is then retried and still produces
+`pass` or `fail`.
 
 Run halts as:
 
@@ -139,8 +147,9 @@ Finish performs two inseparable projections of one settlement:
    not-run operations, operation pass/fail counts, Findings, unknowns,
    emergency patches, halt, result placement, and incomplete work.
 
-Every Goal acceptance point and terminal control receives a binary judgment.
-Unknowns remain attached annotations. An attempt passes only when Run reaches
+Every Goal acceptance point and terminal control receives a binary judgment
+from the exact judge identity frozen by Goal. Unknowns remain attached
+annotations. An attempt passes only when Run reaches
 `plan-complete` and all acceptance, terminal-control, and invariant-control
 judgments pass. A failed operation may therefore be recovered by its frozen
 fail route; operation failure alone does not decide the Goal.

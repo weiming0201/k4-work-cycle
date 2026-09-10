@@ -26,8 +26,8 @@ if [ "${1:-}" = "--help" ]; then
         '  findings[]: {statement, evidence_refs}' \
         '  unknowns[]: {statement, basis_refs}' \
         '  emergency-patch: {kind, operation_id, attempt: 1, application_result,' \
-        '    reason, script_ref, tool_refs, read_refs, write_refs,' \
-        '    maximum_side_effects, actual_side_effect_refs, trace_refs,' \
+        '    reason, script_ref, tool_refs, permission_refs, read_refs, write_refs,' \
+        '    resource_refs, maximum_side_effects, actual_side_effect_refs, trace_refs,' \
         '    findings, unknowns, verification_scope: mainline-resumption-only}' \
         '  halt: {kind, after_operation_id, next_operation_id, trigger,' \
         '    budget_evidence_refs, side_effect_evidence_refs, evidence_refs,' \
@@ -35,6 +35,8 @@ if [ "${1:-}" = "--help" ]; then
         '  result: pass | fail' \
         '  application_result: applied | not-applied' \
         '  trigger: plan-complete | blocked | cancelled' \
+        '  emergency-patch tools, permissions, positions, resources, and effects' \
+        '    must remain inside the frozen Goal execution envelope' \
         '' \
         'Output:' \
         '  One generated operation-result, emergency-patch, or halt event is appended.' \

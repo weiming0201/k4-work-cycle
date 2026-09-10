@@ -1,0 +1,130 @@
+{
+  "bindings": {
+    "observe": {
+      "content_sha256": "26ac6ddfeca389528f7531ab199a6d325a29e68cc0d30374e2a063284aedc77a",
+      "ref": "k4-observe-document/v2#sha256=b6860fa04dc1734b5b7b8ea130ddb492cf16e72e06afbd1955a12e67e79e135d",
+      "sha256": "b6860fa04dc1734b5b7b8ea130ddb492cf16e72e06afbd1955a12e67e79e135d"
+    }
+  },
+  "content_sha256": "f798f320bd07c6a2d03926bf11f540ed4e97ff7d995e34d9d0a4784268689255",
+  "document": {
+    "acceptance_points": [
+      {
+        "acceptance": {
+          "comparison_method": "exact result validation",
+          "conditions": [
+            "fixture baseline"
+          ],
+          "expected": "result exists and validates",
+          "falsifier": "result is absent or invalid",
+          "observable": "result and validation status",
+          "sampling_rule": "full census",
+          "window": "after Run"
+        },
+        "judge": {
+          "claim_limit": "fixture result only",
+          "kind": "script"
+        },
+        "point_id": "point-7e01c94e56297f12",
+        "required_evidence": [
+          "result and validator evidence"
+        ],
+        "statement": "the expected result is valid"
+      }
+    ],
+    "baseline_refs": [
+      "asset://repo"
+    ],
+    "blockers": [],
+    "control_contracts": [
+      {
+        "allowed_domain": [
+          "fixture"
+        ],
+        "check_method": "compare paths with fixture boundary",
+        "check_timing": "invariant",
+        "control_id": "control-e9eba9a4b889143a",
+        "controlled_variable": "write path",
+        "forbidden_drift": [
+          "outside fixture"
+        ],
+        "judge": {
+          "claim_limit": "write paths only",
+          "kind": "script"
+        },
+        "required_evidence": [
+          "write trace"
+        ],
+        "required_trace": [
+          "write trace"
+        ],
+        "statement": "writes remain inside the fixture"
+      },
+      {
+        "allowed_domain": [
+          "bounded attempt"
+        ],
+        "check_method": "compare actual use with budget",
+        "check_timing": "terminal",
+        "control_id": "control-56d5f5a6276ecfec",
+        "controlled_variable": "resource use",
+        "forbidden_drift": [
+          "unbounded use"
+        ],
+        "judge": {
+          "claim_limit": "declared budget only",
+          "kind": "script"
+        },
+        "required_evidence": [
+          "budget trace"
+        ],
+        "required_trace": [
+          "budget trace"
+        ],
+        "statement": "terminal result remains within budget"
+      }
+    ],
+    "evidence_cutoff": {
+      "at": "before execution",
+      "included_refs": [
+        "asset://repo"
+      ]
+    },
+    "execution_envelope": {
+      "authorization_claim_limit": "no external effect",
+      "authorization_ref": "authorization://fixture",
+      "authorization_scope": "fixture only",
+      "available_tools": [
+        "tool://fixture"
+      ],
+      "budget": "one bounded attempt",
+      "maximum_side_effects": [
+        "fixture files"
+      ],
+      "resources": [
+        "resource://local"
+      ]
+    },
+    "non_goals": [
+      "publication"
+    ],
+    "objective": "produce and verify the expected fixture result",
+    "observe_item_ids": [
+      "item-e84d0189dc3b73ee"
+    ],
+    "scope": [
+      "fixture result only"
+    ],
+    "selection_rationale": "this bounded Goal directly addresses the selected gap with available evidence and tools",
+    "source_refs": [
+      "asset://repo"
+    ],
+    "status": "frozen",
+    "target": "isolated repository fixture",
+    "unknowns": [
+      "runtime duration is not predicted"
+    ]
+  },
+  "generated_unix_ms": 1789043713796,
+  "schema": "k4-goal-document/v5"
+}

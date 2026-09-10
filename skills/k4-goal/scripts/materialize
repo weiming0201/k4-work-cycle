@@ -22,9 +22,10 @@ if [ "${1:-}" = "--help" ]; then
         '  non_goals: unique string array; may be empty' \
         '  evidence_cutoff: {at: nonempty string, included_refs: nonempty unique string array}' \
         '  execution_envelope: {authorization_ref, authorization_scope,' \
-        '    authorization_claim_limit, available_tools, resources, budget,' \
-        '    maximum_side_effects}' \
-        '  execution_envelope.available_tools, resources, maximum_side_effects:' \
+        '    authorization_claim_limit, available_tools, permission_refs,' \
+        '    read_refs, write_refs, resources, budget, maximum_side_effects}' \
+        '  execution_envelope.available_tools, permission_refs, read_refs,' \
+        '    write_refs, resources, maximum_side_effects:' \
         '    nonempty unique string arrays; its other fields are nonempty strings' \
         '  acceptance_points[]: {statement, required_evidence, judge, acceptance}' \
         '  acceptance: {observable, conditions, window, expected, falsifier,' \
@@ -37,7 +38,9 @@ if [ "${1:-}" = "--help" ]; then
         '  required_evidence, allowed_domain, forbidden_drift, required_trace:' \
         '    nonempty unique string arrays' \
         '  check_timing: invariant | terminal' \
-        '  judge: {kind, claim_limit}; kind is self | independent-agent | script | human' \
+        '  judge: {kind, ref, claim_limit}; kind is self | independent-agent | script | human' \
+        '  judge.ref must be sourceable according to kind: Goal source, available tool,' \
+        '    or authorization_ref for human' \
         '  blockers, unknowns: unique string arrays; may be empty' \
         '  nonempty blockers produce not-frozen; otherwise status is frozen.' \
         '  Unknowns are retained annotations; frozen requires at least one acceptance point.' \

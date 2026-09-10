@@ -24,7 +24,7 @@ Options:
 Semantic input:
   subject, boundary, cutoff, source_refs, lenses, delta, items, retired
   items[] include lens; lenses must equal the opening Account lenses
-  acceptance_results[]: {id, result, actual_refs, comparison_refs, evidence_refs, unknowns}
+  acceptance_results[]: {id, judge_ref, result, actual_refs, comparison_refs, evidence_refs, unknowns}
   terminal_control_results[]: same fields, one per terminal control
   result: pass | fail; unknowns are annotations, not result states
   result_disposition: {state, statement, refs}

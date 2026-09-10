@@ -10,11 +10,11 @@ current retained/changed/added items, retired predecessors, identities, and
 exact predecessor binding. Subject, boundary, and lenses remain unchanged.
 
 Closure is the stage report. It adds one pass/fail judgment for every Goal
-acceptance point and terminal control, result disposition, incomplete package,
-and exact journal reference. The Tool derives operation counts, actual and
-not-run operations, Findings, unknowns, emergency patches, halt, ledger head,
-and the attempt result from the derived Run projection. Unknown is an annotation,
-not a third routing result.
+acceptance point and terminal control with the exact judge identity frozen by
+Goal, result disposition, incomplete package, and exact journal reference. The
+Tool derives operation counts, actual and not-run operations, Findings,
+unknowns, emergency patches, halt, ledger head, and the attempt result from the
+derived Run projection. Unknown is an annotation, not a third routing result.
 
 An attempt passes only when the Run reaches `plan-complete` and every acceptance
 point, terminal control, and invariant control passes. A failed operation may

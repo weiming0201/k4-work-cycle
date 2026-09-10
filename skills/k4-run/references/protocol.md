@@ -19,7 +19,8 @@ Operations that were never activated remain `not-run` in the projection.
 One emergency patch may restore an activated operation when the Plan omitted a
 necessary execution detail. Its only verification scope is resumption of the
 original operation; it has no separate systematic test and does not change the
-Goal or Plan.
+Goal or Plan. Its tools, permissions, read/write positions, resources, and
+maximum effects must all remain inside the Goal execution envelope.
 
 No event follows halt. `plan-complete` requires every activated branch to reach
 end. `blocked` and `cancelled` preserve exceptional stops. The projection does

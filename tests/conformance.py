@@ -52,7 +52,7 @@ def manifest_input(root: Path) -> dict[str, Any]:
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.4.1",
+        "extension_version": "0.5.0",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",
@@ -270,15 +270,18 @@ class Harness:
                 "authorization_scope": "fixture only",
                 "authorization_claim_limit": "no external effect",
                 "available_tools": ["tool://fixture"],
+                "permission_refs": ["authorization://fixture"],
+                "read_refs": ["asset://repo"],
+                "write_refs": ["artifact://prepare", "artifact://branch-a", "artifact://branch-b", "artifact://join-result", "artifact://adapter"],
                 "resources": ["resource://local"],
                 "budget": "one bounded attempt",
-                "maximum_side_effects": ["fixture files"],
+                "maximum_side_effects": ["fixture files", "one fixture adapter"],
             },
             "acceptance_points": [
                 {
                     "statement": "the expected result is valid",
                     "required_evidence": ["result and validator evidence"],
-                    "judge": {"kind": "script", "claim_limit": "fixture result only"},
+                    "judge": {"kind": "script", "ref": "tool://fixture", "claim_limit": "fixture result only"},
                     "acceptance": {
                         "observable": "result and validation status",
                         "conditions": ["fixture baseline"],
@@ -294,7 +297,7 @@ class Harness:
                 {
                     "statement": "writes remain inside the fixture",
                     "required_evidence": ["write trace"],
-                    "judge": {"kind": "script", "claim_limit": "write paths only"},
+                    "judge": {"kind": "script", "ref": "tool://fixture", "claim_limit": "write paths only"},
                     "controlled_variable": "write path",
                     "allowed_domain": ["fixture"],
                     "forbidden_drift": ["outside fixture"],
@@ -305,7 +308,7 @@ class Harness:
                 {
                     "statement": "terminal result remains within budget",
                     "required_evidence": ["budget trace"],
-                    "judge": {"kind": "script", "claim_limit": "declared budget only"},
+                    "judge": {"kind": "script", "ref": "tool://fixture", "claim_limit": "declared budget only"},
                     "controlled_variable": "resource use",
                     "allowed_domain": ["bounded attempt"],
                     "forbidden_drift": ["unbounded use"],
@@ -317,6 +320,30 @@ class Harness:
             "blockers": [],
             "unknowns": ["runtime duration is not predicted"],
         }
+
+        # Frozen Goals must have an acceptance surface and sourceable judges.
+        empty_goal_input = json.loads(json.dumps(goal_input))
+        empty_goal_input["acceptance_points"] = []
+        empty_goal_source = self.work / "goal-empty-acceptance-input.json"
+        write_json(empty_goal_source, empty_goal_input)
+        self.refuse(
+            "Goal rejects empty acceptance",
+            self.command("k4-goal", "materialize"),
+            "--input", str(empty_goal_source),
+            "--output", str(self.work / "never-empty-goal.json"),
+            "--bind", f"observe={observe0}",
+        )
+        bad_judge_goal_input = json.loads(json.dumps(goal_input))
+        bad_judge_goal_input["acceptance_points"][0]["judge"]["ref"] = "tool://unavailable-judge"
+        bad_judge_source = self.work / "goal-unavailable-judge-input.json"
+        write_json(bad_judge_source, bad_judge_goal_input)
+        self.refuse(
+            "Goal rejects unavailable judge",
+            self.command("k4-goal", "materialize"),
+            "--input", str(bad_judge_source),
+            "--output", str(self.work / "never-unavailable-judge-goal.json"),
+            "--bind", f"observe={observe0}",
+        )
         self.materialize("Goal", "k4-goal", goal_input, goal, [("observe", observe0)])
         goal_doc = read_json(goal)["document"]
         if goal_doc["status"] != "frozen":
@@ -369,6 +396,57 @@ class Harness:
             raise AssertionError("Plan did not materialize the fork-join topology")
         self.passed += 1
         print("PASS Plan fork-join topology")
+
+        boundary_mutations = {
+            "tool": ("tool_ref", "tool://outside-goal"),
+            "permission": ("permission_refs", ["authorization://outside-goal"]),
+            "read": ("read_refs", ["asset://outside-goal"]),
+            "write": ("write_refs", ["artifact://outside-goal"]),
+            "resource": ("resource_refs", ["resource://outside-goal"]),
+            "effect": ("maximum_side_effects", ["outside-goal effect"]),
+        }
+        for label, (field, value) in boundary_mutations.items():
+            invalid_boundary_plan = json.loads(json.dumps(plan_input))
+            invalid_boundary_plan["operations"][0][field] = value
+            source = self.work / f"plan-outside-{label}-input.json"
+            write_json(source, invalid_boundary_plan)
+            self.refuse(
+                f"Plan rejects outside Goal {label}",
+                self.command("k4-plan", "materialize"),
+                "--input", str(source),
+                "--output", str(self.work / f"never-plan-outside-{label}.json"),
+                "--bind", f"goal={goal}",
+            )
+
+        independent_goal_input = json.loads(json.dumps(goal_input))
+        independent_goal_input["source_refs"].append("agent://fixture")
+        independent_goal_input["evidence_cutoff"]["included_refs"].append("agent://fixture")
+        independent_goal_input["acceptance_points"][0]["judge"] = {
+            "kind": "independent-agent",
+            "ref": "agent://fixture",
+            "claim_limit": "fixture result only",
+        }
+        independent_goal = self.work / "independent-judge-goal.json"
+        self.materialize(
+            "Goal with independent judge",
+            "k4-goal",
+            independent_goal_input,
+            independent_goal,
+            [("observe", observe0)],
+        )
+        independent_point_id = read_json(independent_goal)["document"]["acceptance_points"][0]["point_id"]
+        self_judged_plan_input = json.loads(json.dumps(plan_input))
+        self_judged_plan_input["operations"][-1]["satisfies"] = [independent_point_id]
+        self_judged_plan_input["operations"][-1]["responsible_ref"] = "agent://fixture"
+        self_judged_plan_source = self.work / "plan-self-judged-input.json"
+        write_json(self_judged_plan_source, self_judged_plan_input)
+        self.refuse(
+            "Plan rejects independent judge as executor",
+            self.command("k4-plan", "materialize"),
+            "--input", str(self_judged_plan_source),
+            "--output", str(self.work / "never-self-judged-plan.json"),
+            "--bind", f"goal={independent_goal}",
+        )
         operations = [item["operation_id"] for item in plan_doc["operations"]]
 
         def invariant() -> dict[str, Any]:
@@ -405,8 +483,10 @@ class Harness:
             "reason": "supply one missing fixture adapter",
             "script_ref": "script://fixture-adapter",
             "tool_refs": ["tool://fixture"],
+            "permission_refs": ["authorization://fixture"],
             "read_refs": ["asset://repo"],
             "write_refs": ["artifact://adapter"],
+            "resource_refs": ["resource://local"],
             "maximum_side_effects": ["one fixture adapter"],
             "actual_side_effect_refs": ["actual://adapter"],
             "trace_refs": ["trace://patch"],
@@ -414,6 +494,30 @@ class Harness:
             "unknowns": [{"statement": "adapter portability is unknown", "basis_refs": ["basis://patch-unknown"]}],
             "verification_scope": "mainline-resumption-only",
         }
+        patch_boundary_mutations = {
+            "tool": ("tool_refs", ["tool://outside-goal"]),
+            "permission": ("permission_refs", ["authorization://outside-goal"]),
+            "read": ("read_refs", ["asset://outside-goal"]),
+            "write": ("write_refs", ["artifact://outside-goal"]),
+            "resource": ("resource_refs", ["resource://outside-goal"]),
+            "effect": ("maximum_side_effects", ["outside-goal effect"]),
+        }
+        for label, (field, value) in patch_boundary_mutations.items():
+            invalid_patch = json.loads(json.dumps(patch_event))
+            invalid_patch[field] = value
+            invalid_patch_source = self.work / f"patch-outside-{label}.json"
+            write_json(invalid_patch_source, invalid_patch)
+            before = log.read_bytes()
+            self.refuse(
+                f"Run rejects patch outside Goal {label}",
+                self.command("k4-run", "append"),
+                "--input", str(invalid_patch_source),
+                "--log", str(log),
+                "--bind", f"goal={goal}",
+                "--bind", f"plan={plan}",
+            )
+            if log.read_bytes() != before:
+                raise AssertionError("refused boundary patch changed the Run ledger")
         self.append("Run emergency patch", patch_event, log, goal, plan)
         duplicate_input = self.work / "duplicate-patch.json"
         write_json(duplicate_input, patch_event)
@@ -516,6 +620,7 @@ class Harness:
             "acceptance_results": [
                 {
                     "id": point_id,
+                    "judge_ref": "tool://fixture",
                     "result": "pass",
                     "actual_refs": ["actual://result"],
                     "comparison_refs": ["comparison://validator"],
@@ -526,6 +631,7 @@ class Harness:
             "terminal_control_results": [
                 {
                     "id": terminal_id,
+                    "judge_ref": "tool://fixture",
                     "result": "pass",
                     "actual_refs": ["actual://budget"],
                     "comparison_refs": ["comparison://budget"],
@@ -536,6 +642,20 @@ class Harness:
             "result_disposition": {"state": "placed", "statement": "result remains in fixture", "refs": ["actual://result"]},
             "incomplete_deliverable": None,
         }
+        bad_finish_input = json.loads(json.dumps(finish_input))
+        bad_finish_input["acceptance_results"][0]["judge_ref"] = "tool://other-judge"
+        bad_finish_source = self.work / "finish-wrong-judge-input.json"
+        write_json(bad_finish_source, bad_finish_input)
+        self.refuse(
+            "Finish rejects wrong actual judge",
+            self.command("k4-finish", "materialize"),
+            "--input", str(bad_finish_source),
+            "--output", str(self.work / "never-finish-wrong-judge.json"),
+            "--run-log", str(log),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+        )
         self.materialize(
             "Finish",
             "k4-finish",
@@ -558,6 +678,80 @@ class Harness:
             raise AssertionError("Finish did not derive the truthful settlement")
         self.passed += 1
         print("PASS Finish recovered-failure settlement")
+
+        # Empty optional control and patch collections are a normal boundary case.
+        zero_goal_input = json.loads(json.dumps(goal_input))
+        zero_goal_input["control_contracts"] = []
+        zero_goal = self.work / "zero-control-goal.json"
+        self.materialize("Goal with zero controls", "k4-goal", zero_goal_input, zero_goal, [("observe", observe0)])
+        zero_point_id = read_json(zero_goal)["document"]["acceptance_points"][0]["point_id"]
+        zero_operation = operation("prepare", [], [], [], [zero_point_id])
+        zero_operation["controlled_by"] = []
+        zero_plan_input = {
+            "difference": "the accepted fixture result is absent",
+            "selection_rationale": "one operation is sufficient for the zero-control boundary case",
+            "route": {"claim": "execute the one bounded operation", "supporting_refs": ["asset://repo"], "counter_refs": []},
+            "entry_operation_indices": [0],
+            "operations": [zero_operation],
+            "blockers": [],
+            "unknowns": [],
+        }
+        zero_plan = self.work / "zero-control-plan.json"
+        self.materialize("Plan with zero controls", "k4-plan", zero_plan_input, zero_plan, [("goal", zero_goal)])
+        zero_operation_id = read_json(zero_plan)["document"]["operations"][0]["operation_id"]
+        zero_log = self.work / "zero-patch-run.jsonl"
+        self.append(
+            "Run with zero controls",
+            {
+                "kind": "operation-result",
+                "operation_id": zero_operation_id,
+                "result": "pass",
+                "eligibility_refs": ["eligibility://plan"],
+                "actual_output_refs": ["actual://zero-control-result"],
+                "evidence_refs": ["evidence://zero-control-operation"],
+                "trace_refs": ["trace://zero-control-operation"],
+                "invariant_checks": [],
+                "findings": [],
+                "unknowns": [],
+            },
+            zero_log,
+            zero_goal,
+            zero_plan,
+        )
+        self.append(
+            "Run zero-patch halt",
+            {
+                "kind": "halt",
+                "after_operation_id": zero_operation_id,
+                "next_operation_id": None,
+                "trigger": "plan-complete",
+                "budget_evidence_refs": [],
+                "side_effect_evidence_refs": [],
+                "evidence_refs": ["evidence://zero-patch-halt"],
+                "resume_ref": None,
+            },
+            zero_log,
+            zero_goal,
+            zero_plan,
+        )
+        zero_finish_input = json.loads(json.dumps(finish_input))
+        zero_finish_input["source_refs"] = ["asset://repo", "run://ledger", "accept://result"]
+        zero_finish_input["acceptance_results"][0]["id"] = zero_point_id
+        zero_finish_input["terminal_control_results"] = []
+        zero_finish = self.work / "zero-control-finish.json"
+        self.materialize(
+            "Finish with zero controls and patches",
+            "k4-finish",
+            zero_finish_input,
+            zero_finish,
+            [("previous_account", observe0), ("goal", zero_goal), ("plan", zero_plan)],
+            run_log=zero_log,
+        )
+        zero_summary = read_json(zero_finish)["document"]["closure"]["operation_summary"]
+        if zero_summary["emergency_patches"] != 0 or zero_summary["planned"] != 1:
+            raise AssertionError("zero-element Finish projection is not truthful")
+        self.passed += 1
+        print("PASS zero-control and zero-patch collections remain legal")
 
         finish_account = read_json(finish)["document"]["account"]
         next_observe = self.work / "observe1.json"
@@ -625,6 +819,35 @@ class Harness:
             "--bind",
             f"plan={plan}",
         )
+
+        legacy = self.root / "tests" / "fixtures" / "0.4.1"
+        migrated = self.work / "migrated-0.5.0"
+        self.ok(
+            "Migration rebuilds 0.4.1 chain",
+            str(self.root / "tools" / "migrate-0.4.1-to-0.5.0"),
+            "--observe", str(legacy / "observe0.json"),
+            "--goal", str(legacy / "goal.json"),
+            "--plan", str(legacy / "plan.json"),
+            "--run-log", str(legacy / "run.jsonl"),
+            "--finish", str(legacy / "finish.json"),
+            "--policy", str(legacy / "policy.json"),
+            "--output-dir", str(migrated),
+        )
+        report = read_json(migrated / "migration.json")
+        expected_migrations = {
+            "goal": ("k4-goal-document/v5", "k4-goal-document/v6"),
+            "plan": ("k4-plan-document/v5", "k4-plan-document/v6"),
+            "run": ("k4-run-event/v4", "k4-run-event/v5"),
+            "finish": ("k4-finish-document/v2", "k4-finish-document/v3"),
+        }
+        for name, (source_schema, target_schema) in expected_migrations.items():
+            entry = report["artifacts"][name]
+            if (entry["from"], entry["to"]) != (source_schema, target_schema):
+                raise AssertionError(f"migration report has wrong {name} schema transition")
+            if entry["source_sha256"] == entry["target_sha256"]:
+                raise AssertionError(f"migration report falsely preserved {name} file digest")
+        self.passed += 1
+        print("PASS Migration records explicit schema and digest transitions")
         print(f"PASS {self.passed} checks")
 
 

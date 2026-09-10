@@ -31,6 +31,8 @@ if [ "${1:-}" = "--help" ]; then
         'Dependency indices identify earlier operations; result edges identify only later ones.' \
         'An empty result successor reaches end; multiple successors form a fork.' \
         'Multiple exact dependencies form a join and must all route to that operation.' \
+        'Every operation tool, permission, read/write position, resource, and effect' \
+        'must be contained in the frozen Goal execution envelope.' \
         '' \
         'Output:' \
         '  The stable Plan is stored in the output envelope under document.' \

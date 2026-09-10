@@ -16,8 +16,9 @@ Freeze what one attempt must achieve and how Finish can judge it.
 - For a complex situation, compare two or three materially different candidate
   Goals when that improves selection; freeze only the selected Goal and a
   concise selection rationale.
-- Freeze baseline, target, cutoff, acceptance, bounded judges, tools, authority,
-  resources, budget, maximum effects, and controls.
+- Freeze baseline, target, cutoff, acceptance, sourceable bounded judges,
+  tools, permissions, readable and writable positions, resources, budget,
+  maximum effects, and controls.
 - Acceptance describes the resulting state. Controls describe bounded execution
   variables. Neither is an operation.
 - Do not choose a route, form a DAG, execute work, admit post-cutoff evidence,
@@ -26,9 +27,9 @@ Freeze what one attempt must achieve and how Finish can judge it.
 ## Stable result
 
 The selected Goal contains its Observe sources, objective, target, baseline,
-scope, acceptance points, controls, authority, available tools, resources,
-budget, maximum effects, blockers, and unknowns. Unknowns remain annotations;
-only a blocker prevents freezing.
+scope, acceptance points, controls, authority, available tools, permissions,
+read/write positions, resources, budget, maximum effects, blockers, and
+unknowns. Unknowns remain annotations; only a blocker prevents freezing.
 
 ## Materialize
 

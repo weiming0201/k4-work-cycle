@@ -24,18 +24,23 @@ context: _
 	content_sha256: #Digest
 })
 #GoalEnvelope: close({
-	schema:            "k4-goal-document/v5"
+	schema:            "k4-goal-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
 	document: close({
 		status: "frozen"
 		execution_envelope: close({
-			available_tools: #NonEmptyStrings
+			available_tools:      #NonEmptyStrings
+			permission_refs:      #NonEmptyStrings
+			read_refs:            #NonEmptyStrings
+			write_refs:           #NonEmptyStrings
+			resources:            #NonEmptyStrings
+			maximum_side_effects: #NonEmptyStrings
 			...
 		})
-		acceptance_points: [close({point_id: #PointID, ...}), ...close({point_id: #PointID, ...})]
-		control_contracts: [...close({control_id: #ControlID, ...})]
+		acceptance_points: [{point_id: #PointID, judge: {kind: #Text, ref: #Text, ...}, ...}, ...{point_id: #PointID, judge: {kind: #Text, ref: #Text, ...}, ...}]
+		control_contracts: [...{control_id: #ControlID, judge: {kind: #Text, ref: #Text, ...}, ...}]
 		...
 	})
 })
@@ -141,7 +146,7 @@ context: _
 	status:   "executable" | "not-executable"
 })
 #Envelope: close({
-	schema:            "k4-plan-document/v5"
+	schema:            "k4-plan-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({goal: #Binding})
@@ -152,7 +157,14 @@ _input: #Input & context.input
 _goal:  #BoundGoal & context.bindings.goal
 _pointIDs: [for point in _goal.value.document.acceptance_points {point.point_id}]
 _controlIDs: [for control in _goal.value.document.control_contracts {control.control_id}]
-_availableTools: _goal.value.document.execution_envelope.available_tools
+_availableTools:       _goal.value.document.execution_envelope.available_tools
+_availablePermissions: _goal.value.document.execution_envelope.permission_refs
+_availableReads:       _goal.value.document.execution_envelope.read_refs
+_availableWrites:      _goal.value.document.execution_envelope.write_refs
+_availableResources:   _goal.value.document.execution_envelope.resources
+_availableEffects:     _goal.value.document.execution_envelope.maximum_side_effects
+_pointJudges: {for point in _goal.value.document.acceptance_points {(point.point_id): point.judge}}
+_controlJudges: {for control in _goal.value.document.control_contracts {(control.control_id): control.judge}}
 
 _operationIDs: [for operation in _input.operations {
 	_core: close({
@@ -177,23 +189,30 @@ _operationIDs: [for operation in _input.operations {
 _operationIDsUnique: list.UniqueItems(_operationIDs) & true
 
 for entry in _input.entry_operation_indices {
-	if entry >= len(_input.operations) {_invalid: _|_}
+	if entry >= len(_input.operations) {_invalid: error("contract relation rejected: entry >= len(_input.operations)")}
 }
 _entryOperationIDs: [for entry in _input.entry_operation_indices {_operationIDs[entry]}]
 
 for index, operation in _input.operations {
-	if !list.Contains(_availableTools, operation.tool_ref) {_invalid: _|_}
+	if !list.Contains(_availableTools, operation.tool_ref) {_invalid: error("operations.tool_ref: tool must be allowed by the Goal execution envelope")}
+	for ref in operation.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+	for ref in operation.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.read_refs: every read position must be allowed by the Goal execution envelope")}}
+	for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
+	for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+	for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	for dependency in operation.depends_on_indices {
-		if dependency >= index {_invalid: _|_}
+		if dependency >= index {_invalid: error("contract relation rejected: dependency >= index")}
 	}
 	for target in list.Concat([operation.on_result.pass.next_operation_indices, operation.on_result.fail.next_operation_indices]) {
-		if target <= index || target >= len(_input.operations) {_invalid: _|_}
+		if target <= index || target >= len(_input.operations) {_invalid: error("contract relation rejected: target <= index || target >= len(_input.operations)")}
 	}
 	for point in operation.satisfies {
-		if !list.Contains(_pointIDs, point) {_invalid: _|_}
+		if !list.Contains(_pointIDs, point) {_invalid: error("operations.satisfies: every point must identify a Goal acceptance point")}
+		if list.Contains(_pointIDs, point) && _pointJudges[point].kind == "independent-agent" && operation.responsible_ref == _pointJudges[point].ref {_invalid: error("operations.responsible_ref: an independent acceptance judge cannot execute the operation it judges")}
 	}
 	for control in operation.controlled_by {
-		if !list.Contains(_controlIDs, control) {_invalid: _|_}
+		if !list.Contains(_controlIDs, control) {_invalid: error("operations.controlled_by: every control must identify a Goal control contract")}
+		if list.Contains(_controlIDs, control) && _controlJudges[control].kind == "independent-agent" && operation.responsible_ref == _controlJudges[control].ref {_invalid: error("operations.responsible_ref: an independent control judge cannot execute the operation it judges")}
 	}
 }
 
@@ -233,14 +252,14 @@ _incomingIndices: [for currentIndex, current in _input.operations {
 	[for priorIndex, prior in _input.operations if priorIndex < currentIndex if list.Contains(list.Concat([prior.on_result.pass.next_operation_indices, prior.on_result.fail.next_operation_indices]), currentIndex) {priorIndex}]
 }]
 for index, operation in _input.operations {
-	if list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0 {_invalid: _|_}
-	if !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0 {_invalid: _|_}
-	if len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
+	if list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0 {_invalid: error("contract relation rejected: list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0")}
+	if !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0 {_invalid: error("contract relation rejected: !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0")}
+	if len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index] {_invalid: error("contract relation rejected: len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index]")}
 	if len(operation.depends_on_indices) > 0 {
-		if operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
+		if operation.depends_on_indices != _incomingIndices[index] {_invalid: error("contract relation rejected: operation.depends_on_indices != _incomingIndices[index]")}
 		for dependency in operation.depends_on_indices {
-			if !list.Contains(_input.operations[dependency].on_result.pass.next_operation_indices, index) {_invalid: _|_}
-			if !list.Contains(_input.operations[dependency].on_result.fail.next_operation_indices, index) {_invalid: _|_}
+			if !list.Contains(_input.operations[dependency].on_result.pass.next_operation_indices, index) {_invalid: error("contract relation rejected: !list.Contains(_input.operations[dependency].on_result.pass.next_operation_indices, index)")}
+			if !list.Contains(_input.operations[dependency].on_result.fail.next_operation_indices, index) {_invalid: error("contract relation rejected: !list.Contains(_input.operations[dependency].on_result.fail.next_operation_indices, index)")}
 		}
 	}
 }
@@ -283,52 +302,59 @@ _controlCoverage: [for control in _controlIDs {
 
 _status: *"executable" | "not-executable"
 if len(_input.blockers) > 0 {_status: "not-executable"}
-if _status == "executable" && len(_operations) == 0 {_invalid: _|_}
+if _status == "executable" && len(_operations) == 0 {_invalid: error("contract relation rejected: _status == \"executable\" && len(_operations) == 0")}
 if _status == "executable" {
 	for entry in _acceptanceCoverage {
-		if len(entry.operation_ids) == 0 {_invalid: _|_}
+		if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 	}
 	for entry in _controlCoverage {
-		if len(entry.operation_ids) == 0 {_invalid: _|_}
+		if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 	}
 }
 
 _generateChecks: {
 	for index, operation in _input.operations {
-		if !list.Contains(_availableTools, operation.tool_ref) {_invalid: _|_}
+		if !list.Contains(_availableTools, operation.tool_ref) {_invalid: error("operations.tool_ref: tool must be allowed by the Goal execution envelope")}
+		for ref in operation.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+		for ref in operation.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.read_refs: every read position must be allowed by the Goal execution envelope")}}
+		for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
+		for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+		for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 		for dependency in operation.depends_on_indices {
-			if dependency >= index {_invalid: _|_}
+			if dependency >= index {_invalid: error("contract relation rejected: dependency >= index")}
 		}
 		for target in list.Concat([operation.on_result.pass.next_operation_indices, operation.on_result.fail.next_operation_indices]) {
-			if target <= index || target >= len(_input.operations) {_invalid: _|_}
+			if target <= index || target >= len(_input.operations) {_invalid: error("contract relation rejected: target <= index || target >= len(_input.operations)")}
 		}
-		if list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0 {_invalid: _|_}
-		if !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0 {_invalid: _|_}
-		if len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
+		if list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0 {_invalid: error("contract relation rejected: list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) > 0")}
+		if !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0 {_invalid: error("contract relation rejected: !list.Contains(_input.entry_operation_indices, index) && len(_incomingIndices[index]) == 0")}
+		if len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index] {_invalid: error("contract relation rejected: len(_incomingIndices[index]) > 1 && operation.depends_on_indices != _incomingIndices[index]")}
 		if len(operation.depends_on_indices) > 0 {
-			if operation.depends_on_indices != _incomingIndices[index] {_invalid: _|_}
+			if operation.depends_on_indices != _incomingIndices[index] {_invalid: error("contract relation rejected: operation.depends_on_indices != _incomingIndices[index]")}
 			for dependency in operation.depends_on_indices {
-				if !list.Contains(_input.operations[dependency].on_result.pass.next_operation_indices, index) {_invalid: _|_}
-				if !list.Contains(_input.operations[dependency].on_result.fail.next_operation_indices, index) {_invalid: _|_}
+				if !list.Contains(_input.operations[dependency].on_result.pass.next_operation_indices, index) {_invalid: error("contract relation rejected: !list.Contains(_input.operations[dependency].on_result.pass.next_operation_indices, index)")}
+				if !list.Contains(_input.operations[dependency].on_result.fail.next_operation_indices, index) {_invalid: error("contract relation rejected: !list.Contains(_input.operations[dependency].on_result.fail.next_operation_indices, index)")}
 			}
 		}
 		for point in operation.satisfies {
-			if !list.Contains(_pointIDs, point) {_invalid: _|_}
+			if !list.Contains(_pointIDs, point) {_invalid: error("operations.satisfies: every point must identify a Goal acceptance point")}
+			if list.Contains(_pointIDs, point) && _pointJudges[point].kind == "independent-agent" && operation.responsible_ref == _pointJudges[point].ref {_invalid: error("operations.responsible_ref: an independent acceptance judge cannot execute the operation it judges")}
 		}
 		for control in operation.controlled_by {
-			if !list.Contains(_controlIDs, control) {_invalid: _|_}
+			if !list.Contains(_controlIDs, control) {_invalid: error("operations.controlled_by: every control must identify a Goal control contract")}
+			if list.Contains(_controlIDs, control) && _controlJudges[control].kind == "independent-agent" && operation.responsible_ref == _controlJudges[control].ref {_invalid: error("operations.responsible_ref: an independent control judge cannot execute the operation it judges")}
 		}
 	}
 	for entry in _input.entry_operation_indices {
-		if entry >= len(_input.operations) {_invalid: _|_}
+		if entry >= len(_input.operations) {_invalid: error("contract relation rejected: entry >= len(_input.operations)")}
 	}
-	if _status == "executable" && len(_operations) == 0 {_invalid: _|_}
+	if _status == "executable" && len(_operations) == 0 {_invalid: error("contract relation rejected: _status == \"executable\" && len(_operations) == 0")}
 	if _status == "executable" {
 		for entry in _acceptanceCoverage {
-			if len(entry.operation_ids) == 0 {_invalid: _|_}
+			if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 		}
 		for entry in _controlCoverage {
-			if len(entry.operation_ids) == 0 {_invalid: _|_}
+			if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 		}
 	}
 }
@@ -353,7 +379,7 @@ _document: #Document & {
 	status:   _status
 }
 generate: _generateChecks & close({
-	schema: "k4-plan-document/v5"
+	schema: "k4-plan-document/v6"
 	bindings: close({goal: _goal.binding})
 	document: _document
 })
@@ -366,7 +392,7 @@ _existingIDsUnique: list.UniqueItems(_existingIDs) & true
 _existingIndex: {for index, operation in _existing.document.operations {(operation.operation_id): index}}
 _existingEntryIDsUnique: list.UniqueItems(_existing.document.entry_operation_ids) & true
 for entryID in _existing.document.entry_operation_ids {
-	if !list.Contains(_existingIDs, entryID) {_invalid: _|_}
+	if !list.Contains(_existingIDs, entryID) {_invalid: error("contract relation rejected: !list.Contains(_existingIDs, entryID)")}
 }
 _expectedExistingOperationIDs: [for operation in _existing.document.operations {
 	"op-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(close({
@@ -388,34 +414,34 @@ _expectedExistingOperationIDs: [for operation in _existing.document.operations {
 	})))), 0, 16))"
 }]
 for index, operation in _existing.document.operations {
-	if operation.operation_id != _expectedExistingOperationIDs[index] {_invalid: _|_}
-	if !list.Contains(_availableTools, operation.tool_ref) {_invalid: _|_}
+	if operation.operation_id != _expectedExistingOperationIDs[index] {_invalid: error("contract relation rejected: operation.operation_id != _expectedExistingOperationIDs[index]")}
+	if !list.Contains(_availableTools, operation.tool_ref) {_invalid: error("contract relation rejected: !list.Contains(_availableTools, operation.tool_ref)")}
 	for dependency in operation.depends_on {
-		if _existingIndex[dependency] >= index {_invalid: _|_}
+		if _existingIndex[dependency] >= index {_invalid: error("contract relation rejected: _existingIndex[dependency] >= index")}
 	}
 	for target in list.Concat([operation.on_result.pass.next_operation_ids, operation.on_result.fail.next_operation_ids]) {
-		if !list.Contains(_existingIDs, target) {_invalid: _|_}
-		if _existingIndex[target] <= index {_invalid: _|_}
+		if !list.Contains(_existingIDs, target) {_invalid: error("contract relation rejected: !list.Contains(_existingIDs, target)")}
+		if _existingIndex[target] <= index {_invalid: error("contract relation rejected: _existingIndex[target] <= index")}
 	}
 	for point in operation.satisfies {
-		if !list.Contains(_pointIDs, point) {_invalid: _|_}
+		if !list.Contains(_pointIDs, point) {_invalid: error("contract relation rejected: !list.Contains(_pointIDs, point)")}
 	}
 	for control in operation.controlled_by {
-		if !list.Contains(_controlIDs, control) {_invalid: _|_}
+		if !list.Contains(_controlIDs, control) {_invalid: error("contract relation rejected: !list.Contains(_controlIDs, control)")}
 	}
 }
 _existingIncomingIDs: [for currentIndex, current in _existing.document.operations {
 	[for priorIndex, prior in _existing.document.operations if priorIndex < currentIndex if list.Contains(list.Concat([prior.on_result.pass.next_operation_ids, prior.on_result.fail.next_operation_ids]), current.operation_id) {prior.operation_id}]
 }]
 for index, operation in _existing.document.operations {
-	if list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0 {_invalid: _|_}
-	if !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0 {_invalid: _|_}
-	if len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
+	if list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0 {_invalid: error("contract relation rejected: list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0")}
+	if !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0 {_invalid: error("contract relation rejected: !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0")}
+	if len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index] {_invalid: error("contract relation rejected: len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index]")}
 	if len(operation.depends_on) > 0 {
-		if operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
+		if operation.depends_on != _existingIncomingIDs[index] {_invalid: error("contract relation rejected: operation.depends_on != _existingIncomingIDs[index]")}
 		for dependency in operation.depends_on {
-			if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.pass.next_operation_ids, operation.operation_id) {_invalid: _|_}
-			if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.fail.next_operation_ids, operation.operation_id) {_invalid: _|_}
+			if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.pass.next_operation_ids, operation.operation_id) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.pass.next_operation_ids, operation.operation_id)")}
+			if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.fail.next_operation_ids, operation.operation_id) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.fail.next_operation_ids, operation.operation_id)")}
 		}
 	}
 }
@@ -431,8 +457,8 @@ _expectedControlCoverage: [for control in _controlIDs {
 		operation_ids: [for operation in _existing.document.operations if list.Contains(operation.controlled_by, control) {operation.operation_id}]
 	})
 }]
-if _existing.document.coverage.acceptance != _expectedAcceptanceCoverage {_invalid: _|_}
-if _existing.document.coverage.controls != _expectedControlCoverage {_invalid: _|_}
+if _existing.document.coverage.acceptance != _expectedAcceptanceCoverage {_invalid: error("contract relation rejected: _existing.document.coverage.acceptance != _expectedAcceptanceCoverage")}
+if _existing.document.coverage.controls != _expectedControlCoverage {_invalid: error("contract relation rejected: _existing.document.coverage.controls != _expectedControlCoverage")}
 _existingStartForks: *[] | [...]
 if len(_existing.document.entry_operation_ids) > 1 {
 	_existingStartForks: [close({after_operation_id: null, result: null, next_operation_ids: _existing.document.entry_operation_ids})]
@@ -457,66 +483,73 @@ _existingFailEnds: [for operation in _existing.document.operations if len(operat
 	close({after_operation_id: operation.operation_id, result: "fail"})
 }]
 _expectedEnds: list.Concat([_existingPassEnds, _existingFailEnds])
-if _existing.document.topology.forks != _expectedForks {_invalid: _|_}
-if _existing.document.topology.joins != _expectedJoins {_invalid: _|_}
-if _existing.document.topology.ends != _expectedEnds {_invalid: _|_}
-if len(_existing.document.blockers) > 0 && _existing.document.status != "not-executable" {_invalid: _|_}
-if len(_existing.document.blockers) == 0 && _existing.document.status != "executable" {_invalid: _|_}
+if _existing.document.topology.forks != _expectedForks {_invalid: error("contract relation rejected: _existing.document.topology.forks != _expectedForks")}
+if _existing.document.topology.joins != _expectedJoins {_invalid: error("contract relation rejected: _existing.document.topology.joins != _expectedJoins")}
+if _existing.document.topology.ends != _expectedEnds {_invalid: error("contract relation rejected: _existing.document.topology.ends != _expectedEnds")}
+if len(_existing.document.blockers) > 0 && _existing.document.status != "not-executable" {_invalid: error("contract relation rejected: len(_existing.document.blockers) > 0 && _existing.document.status != \"not-executable\"")}
+if len(_existing.document.blockers) == 0 && _existing.document.status != "executable" {_invalid: error("contract relation rejected: len(_existing.document.blockers) == 0 && _existing.document.status != \"executable\"")}
 if _existing.document.status == "executable" {
-	if len(_existing.document.operations) == 0 {_invalid: _|_}
+	if len(_existing.document.operations) == 0 {_invalid: error("contract relation rejected: len(_existing.document.operations) == 0")}
 	for entry in _existing.document.coverage.acceptance {
-		if len(entry.operation_ids) == 0 {_invalid: _|_}
+		if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 	}
 	for entry in _existing.document.coverage.controls {
-		if len(entry.operation_ids) == 0 {_invalid: _|_}
+		if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 	}
 }
 _validateChecks: {
 	_entryIDsUnique: list.UniqueItems(_existing.document.entry_operation_ids) & true
 	for entryID in _existing.document.entry_operation_ids {
-		if !list.Contains(_existingIDs, entryID) {_invalid: _|_}
+		if !list.Contains(_existingIDs, entryID) {_invalid: error("contract relation rejected: !list.Contains(_existingIDs, entryID)")}
 	}
 	for index, operation in _existing.document.operations {
-		if operation.operation_id != _expectedExistingOperationIDs[index] {_invalid: _|_}
-		if !list.Contains(_availableTools, operation.tool_ref) {_invalid: _|_}
+		if operation.operation_id != _expectedExistingOperationIDs[index] {_invalid: error("contract relation rejected: operation.operation_id != _expectedExistingOperationIDs[index]")}
+		if !list.Contains(_availableTools, operation.tool_ref) {_invalid: error("operations.tool_ref: tool must be allowed by the Goal execution envelope")}
+		for ref in operation.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+		for ref in operation.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.read_refs: every read position must be allowed by the Goal execution envelope")}}
+		for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
+		for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+		for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 		for dependency in operation.depends_on {
-			if _existingIndex[dependency] >= index {_invalid: _|_}
+			if _existingIndex[dependency] >= index {_invalid: error("contract relation rejected: _existingIndex[dependency] >= index")}
 		}
 		for target in list.Concat([operation.on_result.pass.next_operation_ids, operation.on_result.fail.next_operation_ids]) {
-			if !list.Contains(_existingIDs, target) {_invalid: _|_}
-			if _existingIndex[target] <= index {_invalid: _|_}
+			if !list.Contains(_existingIDs, target) {_invalid: error("contract relation rejected: !list.Contains(_existingIDs, target)")}
+			if _existingIndex[target] <= index {_invalid: error("contract relation rejected: _existingIndex[target] <= index")}
 		}
-		if list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0 {_invalid: _|_}
-		if !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0 {_invalid: _|_}
-		if len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
+		if list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0 {_invalid: error("contract relation rejected: list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) > 0")}
+		if !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0 {_invalid: error("contract relation rejected: !list.Contains(_existing.document.entry_operation_ids, operation.operation_id) && len(_existingIncomingIDs[index]) == 0")}
+		if len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index] {_invalid: error("contract relation rejected: len(_existingIncomingIDs[index]) > 1 && operation.depends_on != _existingIncomingIDs[index]")}
 		if len(operation.depends_on) > 0 {
-			if operation.depends_on != _existingIncomingIDs[index] {_invalid: _|_}
+			if operation.depends_on != _existingIncomingIDs[index] {_invalid: error("contract relation rejected: operation.depends_on != _existingIncomingIDs[index]")}
 			for dependency in operation.depends_on {
-				if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.pass.next_operation_ids, operation.operation_id) {_invalid: _|_}
-				if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.fail.next_operation_ids, operation.operation_id) {_invalid: _|_}
+				if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.pass.next_operation_ids, operation.operation_id) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.pass.next_operation_ids, operation.operation_id)")}
+				if !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.fail.next_operation_ids, operation.operation_id) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.operations[_existingIndex[dependency]].on_result.fail.next_operation_ids, operation.operation_id)")}
 			}
 		}
 		for point in operation.satisfies {
-			if !list.Contains(_pointIDs, point) {_invalid: _|_}
+			if !list.Contains(_pointIDs, point) {_invalid: error("operations.satisfies: every point must identify a Goal acceptance point")}
+			if list.Contains(_pointIDs, point) && _pointJudges[point].kind == "independent-agent" && operation.responsible_ref == _pointJudges[point].ref {_invalid: error("operations.responsible_ref: an independent acceptance judge cannot execute the operation it judges")}
 		}
 		for control in operation.controlled_by {
-			if !list.Contains(_controlIDs, control) {_invalid: _|_}
+			if !list.Contains(_controlIDs, control) {_invalid: error("operations.controlled_by: every control must identify a Goal control contract")}
+			if list.Contains(_controlIDs, control) && _controlJudges[control].kind == "independent-agent" && operation.responsible_ref == _controlJudges[control].ref {_invalid: error("operations.responsible_ref: an independent control judge cannot execute the operation it judges")}
 		}
 	}
-	if _existing.document.coverage.acceptance != _expectedAcceptanceCoverage {_invalid: _|_}
-	if _existing.document.coverage.controls != _expectedControlCoverage {_invalid: _|_}
-	if _existing.document.topology.forks != _expectedForks {_invalid: _|_}
-	if _existing.document.topology.joins != _expectedJoins {_invalid: _|_}
-	if _existing.document.topology.ends != _expectedEnds {_invalid: _|_}
-	if len(_existing.document.blockers) > 0 && _existing.document.status != "not-executable" {_invalid: _|_}
-	if len(_existing.document.blockers) == 0 && _existing.document.status != "executable" {_invalid: _|_}
+	if _existing.document.coverage.acceptance != _expectedAcceptanceCoverage {_invalid: error("contract relation rejected: _existing.document.coverage.acceptance != _expectedAcceptanceCoverage")}
+	if _existing.document.coverage.controls != _expectedControlCoverage {_invalid: error("contract relation rejected: _existing.document.coverage.controls != _expectedControlCoverage")}
+	if _existing.document.topology.forks != _expectedForks {_invalid: error("contract relation rejected: _existing.document.topology.forks != _expectedForks")}
+	if _existing.document.topology.joins != _expectedJoins {_invalid: error("contract relation rejected: _existing.document.topology.joins != _expectedJoins")}
+	if _existing.document.topology.ends != _expectedEnds {_invalid: error("contract relation rejected: _existing.document.topology.ends != _expectedEnds")}
+	if len(_existing.document.blockers) > 0 && _existing.document.status != "not-executable" {_invalid: error("contract relation rejected: len(_existing.document.blockers) > 0 && _existing.document.status != \"not-executable\"")}
+	if len(_existing.document.blockers) == 0 && _existing.document.status != "executable" {_invalid: error("contract relation rejected: len(_existing.document.blockers) == 0 && _existing.document.status != \"executable\"")}
 	if _existing.document.status == "executable" {
-		if len(_existing.document.operations) == 0 {_invalid: _|_}
+		if len(_existing.document.operations) == 0 {_invalid: error("contract relation rejected: len(_existing.document.operations) == 0")}
 		for entry in _existing.document.coverage.acceptance {
-			if len(entry.operation_ids) == 0 {_invalid: _|_}
+			if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 		}
 		for entry in _existing.document.coverage.controls {
-			if len(entry.operation_ids) == 0 {_invalid: _|_}
+			if len(entry.operation_ids) == 0 {_invalid: error("contract relation rejected: len(entry.operation_ids) == 0")}
 		}
 	}
 }

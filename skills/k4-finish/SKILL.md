@@ -16,8 +16,9 @@ ledger that Observe opened.
 - Preserve the Account subject, boundary, and observation lenses. Account for
   every predecessor item as retained, changed, or retired; new facts may be
   added only inside an already declared lens.
-- Judge every Goal acceptance point and terminal control from bounded evidence.
-  A completed Plan route does not by itself prove that the Goal passed.
+- Judge every Goal acceptance point and terminal control from bounded evidence,
+  recording the exact judge identity frozen by Goal. A completed Plan route
+  does not by itself prove that the Goal passed.
 - Aggregate actual and not-run operations, pass/fail results, Findings,
   unknowns, emergency patches, halt, result disposition, and incomplete work.
 - Do not repair, replan, append Run events, adopt or publish a result, or expose

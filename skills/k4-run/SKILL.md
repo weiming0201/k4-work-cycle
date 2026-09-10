@@ -19,9 +19,10 @@ Perform the selected Plan and preserve what actually happens.
   on either result and do not change routing.
 - If a significant Plan omission prevents the active operation, one emergency
   patch attempt is allowed for that operation. Record its script, exact
-  positions, effects, application result, Finding, and unknowns. Do not add a
-  separate systematic test for the patch; retry the original operation and let
-  that operation produce the pass/fail result.
+  tools, permissions, positions, resources, effects, application result,
+  Finding, and unknowns. Every boundary remains inside the Goal envelope. Do
+  not add a separate systematic test for the patch; retry the original
+  operation and let that operation produce the pass/fail result.
 - Halt as `plan-complete` when every activated branch reaches end. Halt as
   `blocked` only when the frozen route cannot continue within authority even
   after the permitted patch; preserve cancellation as cancellation.

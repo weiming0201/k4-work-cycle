@@ -19,6 +19,9 @@ are end edges. Every result edge points only forward in topological order, so no
 write-back edge or cycle is accepted. Findings and unknowns are annotations,
 not control-flow results.
 
-An executable Plan has no blocker, covers every Goal point and control, and uses
-only Goal-authorized tools. It contains no execution result. Run
-`scripts/materialize --help` for exact input fields.
+An executable Plan has no blocker, covers every Goal point and control, and
+keeps every operation's tool, permissions, read/write positions, resources,
+and maximum effects within the Goal execution envelope. An independent judge
+cannot also be the responsible executor for the point or control it judges.
+The Plan contains no execution result. Run `scripts/materialize --help` for
+exact input fields.

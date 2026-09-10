@@ -1,0 +1,298 @@
+{
+  "bindings": {
+    "goal": {
+      "content_sha256": "f798f320bd07c6a2d03926bf11f540ed4e97ff7d995e34d9d0a4784268689255",
+      "ref": "k4-goal-document/v5#sha256=f8bc3a0865e787d9400b18b05a84ff98bc1fcae00bc9abdb554441fe9cb05690",
+      "sha256": "f8bc3a0865e787d9400b18b05a84ff98bc1fcae00bc9abdb554441fe9cb05690"
+    }
+  },
+  "content_sha256": "9fda7e551d421d47e2aa3cd8d720a49b89da90b4378664bf32585fc952854adb",
+  "document": {
+    "blockers": [],
+    "coverage": {
+      "acceptance": [
+        {
+          "operation_ids": [
+            "op-ef4f9a5fd5a68936"
+          ],
+          "point_id": "point-7e01c94e56297f12"
+        }
+      ],
+      "controls": [
+        {
+          "control_id": "control-e9eba9a4b889143a",
+          "operation_ids": [
+            "op-c97f2a67e750729d",
+            "op-a7a249a0fadf51f0",
+            "op-82e49521f25e0822",
+            "op-ef4f9a5fd5a68936"
+          ]
+        },
+        {
+          "control_id": "control-56d5f5a6276ecfec",
+          "operation_ids": [
+            "op-c97f2a67e750729d",
+            "op-a7a249a0fadf51f0",
+            "op-82e49521f25e0822",
+            "op-ef4f9a5fd5a68936"
+          ]
+        }
+      ]
+    },
+    "difference": "the accepted fixture result is absent",
+    "entry_operation_ids": [
+      "op-c97f2a67e750729d"
+    ],
+    "operations": [
+      {
+        "controlled_by": [
+          "control-e9eba9a4b889143a",
+          "control-56d5f5a6276ecfec"
+        ],
+        "depends_on": [],
+        "idempotency": "fresh fixture output",
+        "maximum_side_effects": [
+          "fixture files"
+        ],
+        "on_result": {
+          "fail": {
+            "next_operation_ids": [],
+            "reason": "fail route"
+          },
+          "pass": {
+            "next_operation_ids": [
+              "op-a7a249a0fadf51f0",
+              "op-82e49521f25e0822"
+            ],
+            "reason": "pass route"
+          }
+        },
+        "operation_id": "op-c97f2a67e750729d",
+        "operation_key": "prepare",
+        "permission_refs": [
+          "authorization://fixture"
+        ],
+        "post_checks": [
+          "declared result is observable"
+        ],
+        "pre_checks": [
+          "operation is activated"
+        ],
+        "read_refs": [
+          "asset://repo"
+        ],
+        "recovery": "follow the frozen fail edge",
+        "resource_refs": [
+          "resource://local"
+        ],
+        "responsible_ref": "agent://fixture",
+        "retry_limit": 0,
+        "satisfies": [],
+        "tool_ref": "tool://fixture",
+        "write_refs": [
+          "artifact://prepare"
+        ]
+      },
+      {
+        "controlled_by": [
+          "control-e9eba9a4b889143a",
+          "control-56d5f5a6276ecfec"
+        ],
+        "depends_on": [],
+        "idempotency": "fresh fixture output",
+        "maximum_side_effects": [
+          "fixture files"
+        ],
+        "on_result": {
+          "fail": {
+            "next_operation_ids": [
+              "op-ef4f9a5fd5a68936"
+            ],
+            "reason": "fail route"
+          },
+          "pass": {
+            "next_operation_ids": [
+              "op-ef4f9a5fd5a68936"
+            ],
+            "reason": "pass route"
+          }
+        },
+        "operation_id": "op-a7a249a0fadf51f0",
+        "operation_key": "branch-a",
+        "permission_refs": [
+          "authorization://fixture"
+        ],
+        "post_checks": [
+          "declared result is observable"
+        ],
+        "pre_checks": [
+          "operation is activated"
+        ],
+        "read_refs": [
+          "asset://repo"
+        ],
+        "recovery": "follow the frozen fail edge",
+        "resource_refs": [
+          "resource://local"
+        ],
+        "responsible_ref": "agent://fixture",
+        "retry_limit": 0,
+        "satisfies": [],
+        "tool_ref": "tool://fixture",
+        "write_refs": [
+          "artifact://branch-a"
+        ]
+      },
+      {
+        "controlled_by": [
+          "control-e9eba9a4b889143a",
+          "control-56d5f5a6276ecfec"
+        ],
+        "depends_on": [],
+        "idempotency": "fresh fixture output",
+        "maximum_side_effects": [
+          "fixture files"
+        ],
+        "on_result": {
+          "fail": {
+            "next_operation_ids": [
+              "op-ef4f9a5fd5a68936"
+            ],
+            "reason": "fail route"
+          },
+          "pass": {
+            "next_operation_ids": [
+              "op-ef4f9a5fd5a68936"
+            ],
+            "reason": "pass route"
+          }
+        },
+        "operation_id": "op-82e49521f25e0822",
+        "operation_key": "branch-b",
+        "permission_refs": [
+          "authorization://fixture"
+        ],
+        "post_checks": [
+          "declared result is observable"
+        ],
+        "pre_checks": [
+          "operation is activated"
+        ],
+        "read_refs": [
+          "asset://repo"
+        ],
+        "recovery": "follow the frozen fail edge",
+        "resource_refs": [
+          "resource://local"
+        ],
+        "responsible_ref": "agent://fixture",
+        "retry_limit": 0,
+        "satisfies": [],
+        "tool_ref": "tool://fixture",
+        "write_refs": [
+          "artifact://branch-b"
+        ]
+      },
+      {
+        "controlled_by": [
+          "control-e9eba9a4b889143a",
+          "control-56d5f5a6276ecfec"
+        ],
+        "depends_on": [
+          "op-a7a249a0fadf51f0",
+          "op-82e49521f25e0822"
+        ],
+        "idempotency": "fresh fixture output",
+        "maximum_side_effects": [
+          "fixture files"
+        ],
+        "on_result": {
+          "fail": {
+            "next_operation_ids": [],
+            "reason": "fail route"
+          },
+          "pass": {
+            "next_operation_ids": [],
+            "reason": "pass route"
+          }
+        },
+        "operation_id": "op-ef4f9a5fd5a68936",
+        "operation_key": "join-result",
+        "permission_refs": [
+          "authorization://fixture"
+        ],
+        "post_checks": [
+          "declared result is observable"
+        ],
+        "pre_checks": [
+          "operation is activated"
+        ],
+        "read_refs": [
+          "asset://repo"
+        ],
+        "recovery": "follow the frozen fail edge",
+        "resource_refs": [
+          "resource://local"
+        ],
+        "responsible_ref": "agent://fixture",
+        "retry_limit": 0,
+        "satisfies": [
+          "point-7e01c94e56297f12"
+        ],
+        "tool_ref": "tool://fixture",
+        "write_refs": [
+          "artifact://join-result"
+        ]
+      }
+    ],
+    "route": {
+      "claim": "fork two checks and join their responses",
+      "counter_refs": [],
+      "supporting_refs": [
+        "asset://repo"
+      ]
+    },
+    "selection_rationale": "the fork-join route exercises independent work while preserving one bounded settlement",
+    "status": "executable",
+    "topology": {
+      "ends": [
+        {
+          "after_operation_id": "op-ef4f9a5fd5a68936",
+          "result": "pass"
+        },
+        {
+          "after_operation_id": "op-c97f2a67e750729d",
+          "result": "fail"
+        },
+        {
+          "after_operation_id": "op-ef4f9a5fd5a68936",
+          "result": "fail"
+        }
+      ],
+      "forks": [
+        {
+          "after_operation_id": "op-c97f2a67e750729d",
+          "next_operation_ids": [
+            "op-a7a249a0fadf51f0",
+            "op-82e49521f25e0822"
+          ],
+          "result": "pass"
+        }
+      ],
+      "joins": [
+        {
+          "before_operation_id": "op-ef4f9a5fd5a68936",
+          "predecessor_operation_ids": [
+            "op-a7a249a0fadf51f0",
+            "op-82e49521f25e0822"
+          ]
+        }
+      ]
+    },
+    "unknowns": [
+      "one branch may fail and use its frozen route"
+    ]
+  },
+  "generated_unix_ms": 1789043714186,
+  "schema": "k4-plan-document/v5"
+}

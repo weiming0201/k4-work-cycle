@@ -1,0 +1,360 @@
+#!/usr/bin/env python3
+"""Re-materialize one 0.4.1 work-cycle chain under the 0.5.0 contracts."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import subprocess
+import tempfile
+from typing import Any
+
+
+DOCUMENT_KEYS = {"schema", "generated_unix_ms", "content_sha256", "bindings", "document"}
+EVENT_KEYS = {
+    "schema", "sequence", "recorded_unix_ms", "previous_event_sha256",
+    "content_sha256", "event_sha256", "bindings", "event",
+}
+
+
+class Refusal(Exception):
+    pass
+
+
+def canonical_line(value: Any) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, sort_keys=True, separators=(",", ":")) + "\n").encode()
+
+
+def canonical_document(value: Any) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
+
+
+def sha256(raw: bytes) -> str:
+    return hashlib.sha256(raw).hexdigest()
+
+
+def document_content(value: dict[str, Any]) -> str:
+    return sha256(canonical_document({"bindings": value["bindings"], "document": value["document"]}))
+
+
+def event_content(value: dict[str, Any]) -> str:
+    return sha256(canonical_document({"bindings": value["bindings"], "event": value["event"]}))
+
+
+def event_hash(value: dict[str, Any]) -> str:
+    return sha256(canonical_line({key: item for key, item in value.items() if key != "event_sha256"}))
+
+
+def load_json(path: Path, label: str) -> Any:
+    try:
+        return json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError) as error:
+        raise Refusal(f"cannot read {label} {path}: {error}") from error
+
+
+def load_document(path: Path, schema: str) -> dict[str, Any]:
+    value = load_json(path, schema)
+    if not isinstance(value, dict) or set(value) != DOCUMENT_KEYS:
+        raise Refusal(f"{path}: invalid document envelope")
+    if value["schema"] != schema:
+        raise Refusal(f"{path}: expected {schema}, observed {value.get('schema')!r}")
+    if value["content_sha256"] != document_content(value):
+        raise Refusal(f"{path}: content_sha256 mismatch")
+    return value
+
+
+def load_log(path: Path) -> list[dict[str, Any]]:
+    try:
+        raw = path.read_bytes()
+    except OSError as error:
+        raise Refusal(f"cannot read Run ledger {path}: {error}") from error
+    if raw and not raw.endswith(b"\n"):
+        raise Refusal("Run ledger must end at a complete record")
+    events: list[dict[str, Any]] = []
+    previous: str | None = None
+    for index, line in enumerate(raw.splitlines()):
+        try:
+            value = json.loads(line)
+        except json.JSONDecodeError as error:
+            raise Refusal(f"Run ledger line {index + 1}: {error}") from error
+        if not isinstance(value, dict) or set(value) != EVENT_KEYS:
+            raise Refusal(f"Run ledger line {index + 1}: invalid event envelope")
+        if value["schema"] != "k4-run-event/v4" or value["sequence"] != index:
+            raise Refusal(f"Run ledger line {index + 1}: wrong schema or sequence")
+        if value["previous_event_sha256"] != previous:
+            raise Refusal(f"Run ledger line {index + 1}: broken previous-event link")
+        if value["content_sha256"] != event_content(value) or value["event_sha256"] != event_hash(value):
+            raise Refusal(f"Run ledger line {index + 1}: digest mismatch")
+        events.append(value)
+        previous = value["event_sha256"]
+    return events
+
+
+def binding(path: Path, value: dict[str, Any]) -> dict[str, str]:
+    raw = path.read_bytes()
+    return {
+        "ref": f"{value['schema']}#sha256={sha256(raw)}",
+        "sha256": sha256(raw),
+        "content_sha256": value["content_sha256"],
+    }
+
+
+def exact_keys(value: Any, keys: set[str], label: str) -> dict[str, Any]:
+    if not isinstance(value, dict) or set(value) != keys:
+        raise Refusal(f"{label} must contain exactly {sorted(keys)}")
+    return value
+
+
+def run(words: list[str], label: str) -> None:
+    process = subprocess.run(words, check=False, capture_output=True, text=True)
+    if process.returncode != 0:
+        raise Refusal(f"{label} failed: {process.stderr.strip() or process.stdout.strip()}")
+
+
+def write_semantic(directory: Path, name: str, value: Any) -> Path:
+    path = directory / name
+    path.write_bytes(canonical_document(value))
+    return path
+
+
+def require_absent_outputs(directory: Path, names: list[str]) -> None:
+    if not directory.parent.is_dir():
+        raise Refusal(f"output parent must exist: {directory.parent}")
+    if directory.exists():
+        raise Refusal(f"output directory must be absent: {directory}")
+    directory.mkdir()
+    for name in names:
+        if (directory / name).exists():
+            raise Refusal(f"output must be absent: {directory / name}")
+
+
+def invoke_materialize(root: Path, skill: str, semantic: Path, output: Path, binds: list[tuple[str, Path]], run_log: Path | None = None) -> None:
+    words = [str(root / "skills" / skill / "scripts" / "materialize"), "--input", str(semantic), "--output", str(output)]
+    if run_log is not None:
+        words.extend(["--run-log", str(run_log)])
+    for name, path in binds:
+        words.extend(["--bind", f"{name}={path}"])
+    run(words, f"materialize {skill}")
+
+
+def migrate(args: argparse.Namespace) -> dict[str, Any]:
+    root = Path(__file__).resolve().parent.parent
+    observe_path = Path(args.observe)
+    goal_path = Path(args.goal)
+    plan_path = Path(args.plan)
+    run_path = Path(args.run_log) if args.run_log else None
+    finish_path = Path(args.finish) if args.finish else None
+    policy_path = Path(args.policy)
+    output = Path(args.output_dir)
+    if finish_path is not None and run_path is None:
+        raise Refusal("--finish requires --run-log")
+
+    observe = load_document(observe_path, "k4-observe-document/v2")
+    old_goal = load_document(goal_path, "k4-goal-document/v5")
+    old_plan = load_document(plan_path, "k4-plan-document/v5")
+    if old_goal["bindings"].get("observe") != binding(observe_path, observe):
+        raise Refusal("old Goal does not bind the supplied Observe document")
+    if old_plan["bindings"].get("goal") != binding(goal_path, old_goal):
+        raise Refusal("old Plan does not bind the supplied Goal document")
+
+    policy = exact_keys(load_json(policy_path, "migration policy"), {"execution_envelope", "judge_refs", "patches"}, "migration policy")
+    boundary = exact_keys(
+        policy["execution_envelope"],
+        {"available_tools", "permission_refs", "read_refs", "write_refs", "resources", "maximum_side_effects"},
+        "migration policy execution_envelope",
+    )
+    old_points = old_goal["document"]["acceptance_points"]
+    old_controls = old_goal["document"]["control_contracts"]
+    expected_judges = {item["point_id"] for item in old_points} | {item["control_id"] for item in old_controls}
+    if not isinstance(policy["judge_refs"], dict) or set(policy["judge_refs"]) != expected_judges:
+        raise Refusal("migration policy judge_refs must exactly cover old Goal points and controls")
+    if run_path is None and policy["patches"] != {}:
+        raise Refusal("migration policy patches must be empty when no Run ledger is supplied")
+
+    names = ["goal.json", "plan.json", "migration.json"]
+    if run_path is not None:
+        names.append("run.jsonl")
+    if finish_path is not None:
+        names.append("finish.json")
+    require_absent_outputs(output, names)
+
+    old_goal_document = old_goal["document"]
+    envelope = dict(old_goal_document["execution_envelope"])
+    envelope.update(boundary)
+    goal_input = {
+        key: old_goal_document[key]
+        for key in ("observe_item_ids", "objective", "selection_rationale", "target", "source_refs", "evidence_cutoff", "baseline_refs", "scope", "non_goals", "blockers", "unknowns")
+    }
+    goal_input["execution_envelope"] = envelope
+    goal_input["acceptance_points"] = [
+        {key: value for key, value in point.items() if key != "point_id"} | {
+            "judge": point["judge"] | {"ref": policy["judge_refs"][point["point_id"]]}
+        }
+        for point in old_points
+    ]
+    goal_input["control_contracts"] = [
+        {key: value for key, value in control.items() if key != "control_id"} | {
+            "judge": control["judge"] | {"ref": policy["judge_refs"][control["control_id"]]}
+        }
+        for control in old_controls
+    ]
+
+    with tempfile.TemporaryDirectory(prefix="k4-cycle-migration-") as temporary_name:
+        temporary = Path(temporary_name)
+        goal_semantic = write_semantic(temporary, "goal-input.json", goal_input)
+        new_goal_path = output / "goal.json"
+        invoke_materialize(root, "k4-goal", goal_semantic, new_goal_path, [("observe", observe_path)])
+        new_goal = load_document(new_goal_path, "k4-goal-document/v6")
+
+        point_map = {old["point_id"]: new["point_id"] for old, new in zip(old_points, new_goal["document"]["acceptance_points"], strict=True)}
+        control_map = {old["control_id"]: new["control_id"] for old, new in zip(old_controls, new_goal["document"]["control_contracts"], strict=True)}
+        old_operations = old_plan["document"]["operations"]
+        operation_index = {operation["operation_id"]: index for index, operation in enumerate(old_operations)}
+        plan_operations = []
+        for operation in old_operations:
+            item = {key: operation[key] for key in (
+                "operation_key", "tool_ref", "responsible_ref", "read_refs", "write_refs", "permission_refs", "resource_refs", "maximum_side_effects", "pre_checks", "post_checks", "idempotency", "retry_limit", "recovery"
+            )}
+            item["depends_on_indices"] = [operation_index[value] for value in operation["depends_on"]]
+            item["satisfies"] = [point_map[value] for value in operation["satisfies"]]
+            item["controlled_by"] = [control_map[value] for value in operation["controlled_by"]]
+            item["on_result"] = {
+                result: {
+                    "next_operation_indices": [operation_index[value] for value in operation["on_result"][result]["next_operation_ids"]],
+                    "reason": operation["on_result"][result]["reason"],
+                }
+                for result in ("pass", "fail")
+            }
+            plan_operations.append(item)
+        plan_input = {
+            "difference": old_plan["document"]["difference"],
+            "selection_rationale": old_plan["document"]["selection_rationale"],
+            "route": old_plan["document"]["route"],
+            "entry_operation_indices": [operation_index[value] for value in old_plan["document"]["entry_operation_ids"]],
+            "operations": plan_operations,
+            "blockers": old_plan["document"]["blockers"],
+            "unknowns": old_plan["document"]["unknowns"],
+        }
+        plan_semantic = write_semantic(temporary, "plan-input.json", plan_input)
+        new_plan_path = output / "plan.json"
+        invoke_materialize(root, "k4-plan", plan_semantic, new_plan_path, [("goal", new_goal_path)])
+        new_plan = load_document(new_plan_path, "k4-plan-document/v6")
+        operation_map = {old["operation_id"]: new["operation_id"] for old, new in zip(old_operations, new_plan["document"]["operations"], strict=True)}
+
+        new_run_path: Path | None = None
+        if run_path is not None:
+            events = load_log(run_path)
+            old_bindings = {"goal": binding(goal_path, old_goal), "plan": binding(plan_path, old_plan)}
+            for event in events:
+                if event["bindings"] != old_bindings:
+                    raise Refusal("old Run event bindings do not match the supplied Goal and Plan")
+            patch_ids = {event["event"]["operation_id"] for event in events if event["event"]["kind"] == "emergency-patch"}
+            if not isinstance(policy["patches"], dict) or set(policy["patches"]) != patch_ids:
+                raise Refusal("migration policy patches must exactly cover old emergency-patch operations")
+            new_run_path = output / "run.jsonl"
+            for index, envelope_value in enumerate(events):
+                event = dict(envelope_value["event"])
+                if event["kind"] in {"operation-result", "emergency-patch"}:
+                    old_operation_id = event["operation_id"]
+                    event["operation_id"] = operation_map[old_operation_id]
+                if event["kind"] == "operation-result":
+                    event["invariant_checks"] = [check | {"control_id": control_map[check["control_id"]]} for check in event["invariant_checks"]]
+                if event["kind"] == "emergency-patch":
+                    addition = exact_keys(policy["patches"][old_operation_id], {"permission_refs", "resource_refs"}, f"patch policy {old_operation_id}")
+                    event.update(addition)
+                if event["kind"] == "halt":
+                    event["after_operation_id"] = operation_map[event["after_operation_id"]] if event["after_operation_id"] is not None else None
+                    event["next_operation_id"] = operation_map[event["next_operation_id"]] if event["next_operation_id"] is not None else None
+                semantic = write_semantic(temporary, f"run-event-{index}.json", event)
+                run([
+                    str(root / "skills/k4-run/scripts/append"), "--input", str(semantic), "--log", str(new_run_path),
+                    "--bind", f"goal={new_goal_path}", "--bind", f"plan={new_plan_path}",
+                ], f"migrate Run event {index}")
+
+        if finish_path is not None and new_run_path is not None:
+            old_finish = load_document(finish_path, "k4-finish-document/v2")
+            old_run_sha256 = sha256(run_path.read_bytes())
+            expected_finish_bindings = {
+                "previous_account": binding(observe_path, observe),
+                "goal": binding(goal_path, old_goal),
+                "plan": binding(plan_path, old_plan),
+                "run": {
+                    "ref": f"k4-run-projection/v4@jsonl#sha256={old_run_sha256}",
+                    "sha256": old_run_sha256,
+                    "content_sha256": old_run_sha256,
+                },
+            }
+            if old_finish["bindings"] != expected_finish_bindings:
+                raise Refusal("old Finish bindings do not match the supplied opening Account, Goal, Plan, and Run ledger")
+            account = old_finish["document"]["account"]
+            closure = old_finish["document"]["closure"]
+            new_point_judges = {item["point_id"]: item["judge"]["ref"] for item in new_goal["document"]["acceptance_points"]}
+            new_control_judges = {item["control_id"]: item["judge"]["ref"] for item in new_goal["document"]["control_contracts"]}
+            finish_input = {
+                key: account[key] for key in ("subject", "boundary", "cutoff", "source_refs", "lenses", "delta", "retired")
+            }
+            finish_input["items"] = [{key: value for key, value in item.items() if key != "item_id"} for item in account["items"]]
+            finish_input["acceptance_results"] = [
+                result | {"id": point_map[result["id"]], "judge_ref": new_point_judges[point_map[result["id"]]]}
+                for result in closure["acceptance_results"]
+            ]
+            finish_input["terminal_control_results"] = [
+                result | {"id": control_map[result["id"]], "judge_ref": new_control_judges[control_map[result["id"]]]}
+                for result in closure["terminal_control_results"]
+            ]
+            finish_input["result_disposition"] = closure["result_disposition"]
+            finish_input["incomplete_deliverable"] = closure["incomplete_deliverable"]
+            finish_semantic = write_semantic(temporary, "finish-input.json", finish_input)
+            invoke_materialize(
+                root, "k4-finish", finish_semantic, output / "finish.json",
+                [("previous_account", observe_path), ("goal", new_goal_path), ("plan", new_plan_path)],
+                run_log=new_run_path,
+            )
+
+    artifacts = {
+        "goal": {"from": old_goal["schema"], "to": "k4-goal-document/v6", "source_sha256": sha256(goal_path.read_bytes()), "target_sha256": sha256((output / "goal.json").read_bytes())},
+        "plan": {"from": old_plan["schema"], "to": "k4-plan-document/v6", "source_sha256": sha256(plan_path.read_bytes()), "target_sha256": sha256((output / "plan.json").read_bytes())},
+    }
+    if run_path is not None:
+        artifacts["run"] = {"from": "k4-run-event/v4", "to": "k4-run-event/v5", "source_sha256": sha256(run_path.read_bytes()), "target_sha256": sha256((output / "run.jsonl").read_bytes())}
+    if finish_path is not None:
+        artifacts["finish"] = {"from": "k4-finish-document/v2", "to": "k4-finish-document/v3", "source_sha256": sha256(finish_path.read_bytes()), "target_sha256": sha256((output / "finish.json").read_bytes())}
+    report = {
+        "schema": "k4-work-cycle-migration/v1",
+        "from_extension": "0.4.1",
+        "to_extension": "0.5.0",
+        "policy_sha256": sha256(policy_path.read_bytes()),
+        "artifacts": artifacts,
+        "semantic_changes": ["explicit Goal permission/read/write bounds", "sourceable Goal judges", "actual Finish judge identity"],
+    }
+    (output / "migration.json").write_bytes(canonical_document(report))
+    return report
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(description="Migrate one exact 0.4.1 work-cycle chain to 0.5.0 by re-materializing every supplied stable artifact.")
+    result.add_argument("--observe", required=True, help="opening k4-observe-document/v2")
+    result.add_argument("--goal", required=True, help="source k4-goal-document/v5")
+    result.add_argument("--plan", required=True, help="source k4-plan-document/v5")
+    result.add_argument("--run-log", help="optional source k4-run-event/v4 JSONL")
+    result.add_argument("--finish", help="optional source k4-finish-document/v2; requires --run-log")
+    result.add_argument("--policy", required=True, help="JSON with execution_envelope, judge_refs, and patches additions")
+    result.add_argument("--output-dir", required=True, help="absent destination directory")
+    return result
+
+
+def main() -> int:
+    try:
+        report = migrate(parser().parse_args())
+        print(json.dumps({"ok": True, **report}, ensure_ascii=False, sort_keys=True))
+        return 0
+    except Refusal as error:
+        print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False, sort_keys=True), file=os.sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
