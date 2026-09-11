@@ -16,8 +16,9 @@ Create the current opening Account for one bounded subject.
   or another task-relevant perspective; it is not a second ledger.
 - Bootstrap without a predecessor, or iterate one exact Account produced by
   Observe or Finish. Changed subject or boundary requires a new bootstrap.
-- On iteration account for every prior item as retained, changed, or retired;
-  mark new items added and bind changes to current evidence.
+- On iteration provide only the semantic delta: changed predecessor items,
+  additions, retirements, reasons, and evidence. The Tool retains every
+  unmentioned predecessor and derives continuity and aggregate fields.
 - Keep facts, source statements, inferences, preferences, conflicts, gaps, and
   unknowns distinguishable. A `goal-candidate` is only an opportunity.
 - Do not select a Goal, define acceptance, choose operations, modify the
@@ -26,9 +27,10 @@ Create the current opening Account for one bounded subject.
 ## Produce the Account
 
 Choose the observation lenses needed to understand the bounded subject. Search,
-inspect, compare, or derive views as the subject requires. For each current
-item, state its lens, continuity relation, epistemic kind, current state,
-minimum supported claim, evidence, and route.
+inspect, compare, or derive views as the subject requires. For each new or
+changed item, state its lens, epistemic kind, current state, minimum supported
+claim, evidence, route, and reason for the change. Name only predecessors that
+changed or retired; do not reproduce retained items or derived indexes.
 
 The stable output contains the full Account, an index from every declared lens
 to its items, the aggregate opening status, and the current Goal candidates.
@@ -39,7 +41,8 @@ form it.
 
 Run `scripts/materialize --help`, supply temporary semantic JSON, and bind
 either no predecessor or one exact Observe/Finish Account. The deterministic
-Tool creates the stable output. Do not hand-author or patch stable JSON.
+Tool preflights the complete semantic delta and creates the full stable output.
+Do not supply generated Account fields or hand-author or patch stable JSON.
 
 Ordinary use does not require reading the CUE contract or Tool source. If the
 Tool refuses input, correct the reported public field or relation; do not

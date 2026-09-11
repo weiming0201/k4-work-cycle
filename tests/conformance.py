@@ -52,7 +52,7 @@ def manifest_input(root: Path) -> dict[str, Any]:
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.6.0",
+        "extension_version": "0.7.0",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",
@@ -211,40 +211,34 @@ class Harness:
     def run(self) -> None:
         observe0 = self.work / "observe0.json"
         observe_input = {
-            "mode": "bootstrap",
             "subject": "isolated repository",
             "boundary": "only the isolated repository fixture",
             "cutoff": "fixture baseline",
-            "source_refs": ["asset://repo"],
-            "lenses": ["delivery", "structure"],
             "delta": {"summary": "initial source inspection", "evidence_refs": ["asset://repo"]},
-            "items": [
+            "additions": [
                 {
-                    "lens": "delivery",
-                    "change": "added",
-                    "previous_item_id": None,
-                    "change_reason": "initial observation",
-                    "epistemic_kind": "fact",
-                    "state": "gap",
-                    "statement": "the expected result is absent",
-                    "evidence_refs": ["asset://repo"],
-                    "route": "goal-candidate",
-                    "route_ref": None,
+                    "reason": "initial observation",
+                    "item": {
+                        "lens": "delivery",
+                        "epistemic_kind": "fact",
+                        "state": "gap",
+                        "statement": "the expected result is absent",
+                        "evidence_refs": ["asset://repo"],
+                        "route": "goal-candidate",
+                    },
                 },
                 {
-                    "lens": "structure",
-                    "change": "added",
-                    "previous_item_id": None,
-                    "change_reason": "initial observation",
-                    "epistemic_kind": "source-statement",
-                    "state": "aligned",
-                    "statement": "the fixture boundary is addressable",
-                    "evidence_refs": ["asset://repo"],
-                    "route": "retain",
-                    "route_ref": None,
+                    "reason": "initial observation",
+                    "item": {
+                        "lens": "structure",
+                        "epistemic_kind": "source-statement",
+                        "state": "aligned",
+                        "statement": "the fixture boundary is addressable",
+                        "evidence_refs": ["asset://repo"],
+                        "route": "retain",
+                    },
                 },
             ],
-            "retired": [],
         }
         self.materialize("Observe bootstrap", "k4-observe", observe_input, observe0, [("previous_account", None)])
         observe = read_json(observe0)["document"]
@@ -253,6 +247,93 @@ class Harness:
         self.passed += 1
         print("PASS Observe lens index")
         gap_id, structure_id = [item["item_id"] for item in observe["account"]["items"]]
+
+        invalid_observe_input = {
+            "cutoff": "",
+            "delta": {"summary": "", "evidence_refs": []},
+            "source_refs": ["caller-must-not-maintain-this"],
+            "updates": [
+                {
+                    "previous_item_id": "not-an-item-id",
+                    "reason": "",
+                    "item": {
+                        "lens": "delivery",
+                        "epistemic_kind": "fact",
+                        "state": "gap",
+                        "statement": "still absent",
+                        "evidence_refs": ["asset://repo"],
+                        "route": "none",
+                        "route_ref": None,
+                    },
+                }
+            ],
+            "additions": [
+                {
+                    "reason": "new external observation",
+                    "item": {
+                        "lens": "external",
+                        "epistemic_kind": "source-statement",
+                        "state": "unknown",
+                        "statement": "an external follow-up is required",
+                        "evidence_refs": ["asset://repo"],
+                        "route": "external",
+                    },
+                }
+            ],
+        }
+        invalid_observe_source = self.work / "invalid-observe-input.json"
+        invalid_observe_output = self.work / "never-observe.json"
+        write_json(invalid_observe_source, invalid_observe_input)
+        invalid_observe = invoke(
+            self.command("k4-observe", "materialize"),
+            "--input",
+            str(invalid_observe_source),
+            "--output",
+            str(invalid_observe_output),
+            "--bind",
+            f"previous_account={observe0}",
+            cwd=self.root,
+            env=self.env,
+        )
+        if invalid_observe.returncode == 0 or invalid_observe_output.exists():
+            raise AssertionError("Observe preflight accepted invalid semantic input")
+        diagnostic = json.loads(invalid_observe.stderr)
+        expected_paths = {
+            "input.source_refs",
+            "input.cutoff",
+            "input.delta.summary",
+            "input.delta.evidence_refs",
+            "input.updates[0].previous_item_id",
+            "input.updates[0].reason",
+            "input.updates[0].item.route_ref",
+            "input.additions[0].item.route_ref",
+        }
+        observed_paths = {entry.split(":", 1)[0] for entry in diagnostic.get("errors", [])}
+        if not expected_paths.issubset(observed_paths):
+            raise AssertionError(f"Observe preflight omitted field diagnostics: {sorted(expected_paths - observed_paths)}")
+        self.passed += 1
+        print("PASS Observe preflight reports all public-input errors")
+
+        retirement_observe = self.work / "observe-retirement.json"
+        retirement_input = {
+            "cutoff": "fixture retirement observation",
+            "delta": {"summary": "the structure item left the current Account", "evidence_refs": ["asset://repo"]},
+            "retirements": [
+                {
+                    "previous_item_id": structure_id,
+                    "reason": "the view is no longer current",
+                    "evidence_refs": ["asset://repo"],
+                }
+            ],
+        }
+        self.materialize("Observe retirement-only delta", "k4-observe", retirement_input, retirement_observe, [("previous_account", observe0)])
+        retirement_account = read_json(retirement_observe)["document"]["account"]
+        if len(retirement_account["items"]) != 1 or retirement_account["items"][0]["item_id"] != gap_id:
+            raise AssertionError("Observe did not retain the untouched predecessor during retirement")
+        if retirement_account["retired"][0]["previous_item_id"] != structure_id:
+            raise AssertionError("Observe did not materialize the declared retirement")
+        self.passed += 1
+        print("PASS Observe derives retirement-only continuity")
 
         goal = self.work / "goal.json"
         goal_input = {
@@ -978,42 +1059,53 @@ class Harness:
         finish_account = read_json(finish)["document"]["account"]
         next_observe = self.work / "observe1.json"
         next_input = {
-            "mode": "iterate",
-            "subject": finish_account["subject"],
-            "boundary": finish_account["boundary"],
             "cutoff": "fresh observation after Finish",
-            "source_refs": ["observe://fresh", "asset://repo"],
-            "lenses": finish_account["lenses"],
             "delta": {"summary": "fresh observation", "evidence_refs": ["observe://fresh"]},
-            "items": [
+            "updates": [
                 {
-                    "lens": "delivery",
-                    "change": "changed",
                     "previous_item_id": finish_account["items"][0]["item_id"],
-                    "change_reason": "fresh observation confirms persistence",
-                    "epistemic_kind": "fact",
-                    "state": "aligned",
-                    "statement": "the result remains observable",
-                    "evidence_refs": ["observe://fresh"],
-                    "route": "none",
-                    "route_ref": None,
-                },
-                {
-                    "lens": "structure",
-                    "change": "retained",
-                    "previous_item_id": finish_account["items"][1]["item_id"],
-                    "change_reason": "the source statement remains current",
-                    "epistemic_kind": "source-statement",
-                    "state": "aligned",
-                    "statement": "the fixture boundary is addressable",
-                    "evidence_refs": ["asset://repo"],
-                    "route": "retain",
-                    "route_ref": None,
+                    "reason": "fresh observation confirms persistence",
+                    "item": {
+                        "lens": "delivery",
+                        "epistemic_kind": "fact",
+                        "state": "aligned",
+                        "statement": "the result remains observable",
+                        "evidence_refs": ["observe://fresh"],
+                        "route": "none",
+                    },
                 },
             ],
-            "retired": [],
         }
         self.materialize("Observe after Finish", "k4-observe", next_input, next_observe, [("previous_account", finish)])
+        next_account = read_json(next_observe)["document"]["account"]
+        if next_account["items"][1]["item_id"] != finish_account["items"][1]["item_id"]:
+            raise AssertionError("Observe did not retain an unmentioned predecessor item")
+        if next_account["source_refs"] != ["observe://fresh", "asset://repo"]:
+            raise AssertionError("Observe did not derive the complete source reference union")
+        self.passed += 1
+        print("PASS Observe derives retained items and source references")
+
+        legacy_finish = self.root / "tests" / "fixtures" / "0.4.1" / "finish.json"
+        legacy_account = read_json(legacy_finish)["document"]["account"]
+        legacy_previous = legacy_account["items"][0]
+        legacy_item = {
+            key: legacy_previous[key]
+            for key in ("lens", "epistemic_kind", "state", "statement", "evidence_refs", "route")
+        }
+        if legacy_previous["route"] == "external":
+            legacy_item["route_ref"] = legacy_previous["route_ref"]
+        legacy_item["statement"] = f"{legacy_item['statement']} Re-observed under the delta-only interface."
+        legacy_input = {
+            "cutoff": "delta-only compatibility observation",
+            "delta": {"summary": "the legacy Account was re-observed", "evidence_refs": [legacy_item["evidence_refs"][0]]},
+            "updates": [{"previous_item_id": legacy_previous["item_id"], "reason": "compatibility observation", "item": legacy_item}],
+        }
+        legacy_next = self.work / "observe-from-legacy-finish.json"
+        self.materialize("Observe from legacy Finish Account", "k4-observe", legacy_input, legacy_next, [("previous_account", legacy_finish)])
+        if read_json(legacy_next)["document"]["account"]["revision"] != legacy_account["revision"] + 1:
+            raise AssertionError("Observe did not continue the legacy Finish Account revision")
+        self.passed += 1
+        print("PASS Observe preserves legacy Account continuity")
 
         invalid_plan = json.loads(json.dumps(plan_input))
         invalid_plan["operations"][1]["on_result"]["pass"]["next_operation_indices"] = [0]

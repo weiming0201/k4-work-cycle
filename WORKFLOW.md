@@ -43,8 +43,9 @@ Account[0]   = observe(null, Evidence[0])
 Account[n+1] = observe(Account[n], DeltaEvidence[n+1])
 ```
 
-Iteration keeps subject and boundary fixed and accounts for every predecessor
-item exactly once as retained, changed, or retired; new items are added.
+Iteration keeps subject and boundary fixed. Its semantic input names only
+changed, added, or retired items; the deterministic materializer carries every
+unmentioned predecessor forward as retained and derives the complete Account.
 Observe exposes current gaps, conflicts, unknowns, and Goal candidates, but it
 does not select a Goal, define acceptance, choose operations, modify the
 observed subject, or close an attempt.

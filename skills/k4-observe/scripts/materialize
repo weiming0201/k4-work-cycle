@@ -1,59 +1,354 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env python3
+"""Preflight delta-only Observe input, then invoke the stable-result Tool."""
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-skill_dir=$(dirname -- "$script_dir")
-tool=${K4_STABLE_RESULT:-}
+from __future__ import annotations
 
-if [ "${1:-}" = "--help" ]; then
-    printf '%s\n' \
-        'Usage: materialize --input FILE --output FILE (--null-bind previous_account | --bind previous_account=FILE)' \
-        '' \
-        'Create one immutable Observe Account from temporary semantic JSON.' \
-        '' \
-        'Options:' \
-        '  --input FILE    JSON object with the semantic fields below' \
-        '  --output FILE   absent output path whose parent already exists' \
-        '  --null-bind previous_account' \
-        '                  bootstrap a new subject and boundary' \
-        '  --bind previous_account=FILE' \
-        '                  iterate the exact prior Observe or Finish Account' \
-        '' \
-        'Semantic input:' \
-        '  mode: bootstrap | iterate' \
-        '  subject, boundary, cutoff: nonempty strings' \
-        '  source_refs: unique nonempty strings' \
-        '  lenses: unique nonempty observation-lens names' \
-        '  delta: {summary, evidence_refs}' \
-        '  items[]: {lens, change, previous_item_id, change_reason, epistemic_kind,' \
-        '            state, statement, evidence_refs, route, route_ref}' \
-        '  retired[]: {previous_item_id, reason, evidence_refs}' \
-        '  change: retained | changed | added' \
-        '  epistemic_kind: fact | source-statement | inference | preference | unknown' \
-        '  state: aligned | gap | conflict | unknown' \
-        '  route: none | goal-candidate | retain | external' \
-        '' \
-        'Iteration constraint:' \
-        '  subject and boundary must exactly equal the prior Account.' \
-        '  Bootstrap a new Account when either one changes.' \
-        '' \
-        'Output:' \
-        '  The stable Observe envelope stores the full Account and generated lens index.' \
-        '' \
-        'Exit status: 0 on materialization; 1 without output on refusal.'
-    exit 0
-fi
+import argparse
+import json
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import sys
+from typing import Any
 
-if [ -z "$tool" ]; then tool=$(command -v stable-result || true); fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
-    tool="$skill_dir/../../tools/stable-result"
-fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
-    tool="$skill_dir/../../workspace/tools/stable-result"
-fi
-if [ -z "$tool" ]; then
-    echo "stable-result is not available" >&2
-    exit 1
-fi
 
-exec "$tool" --contract "$skill_dir/assets/protocol.cue" materialize "$@"
+ITEM_ID = re.compile(r"^item-[0-9a-f]{16}$")
+KINDS = {"fact", "source-statement", "inference", "preference", "unknown"}
+STATES = {"aligned", "gap", "conflict", "unknown"}
+ROUTES = {"none", "goal-candidate", "retain", "external"}
+HELP = """Usage: materialize --input FILE --output FILE (--null-bind previous_account | --bind previous_account=FILE)
+
+Create one immutable Observe Account from delta-only semantic JSON.
+
+Options:
+  --input FILE    temporary semantic JSON; stable Account fields are generated
+  --output FILE   absent output path whose parent already exists
+  --null-bind previous_account
+                  bootstrap a new subject and boundary
+  --bind previous_account=FILE
+                  iterate the exact prior Observe or Finish Account
+
+Bootstrap input:
+  subject, boundary, cutoff: nonempty strings
+  delta: {summary, evidence_refs}
+  additions[]: {reason, item}
+
+Iteration input:
+  cutoff: nonempty string
+  delta: {summary, evidence_refs}
+  updates[]: {previous_item_id, reason, item}                 (optional)
+  additions[]: {reason, item}                                (optional)
+  retirements[]: {previous_item_id, reason, evidence_refs}   (optional)
+  At least one update, addition, or retirement is required.
+  Unmentioned predecessor items are retained automatically.
+
+Item:
+  {lens, epistemic_kind, state, statement, evidence_refs, route}
+  route_ref is required only when route is external and must otherwise be omitted.
+  epistemic_kind: fact | source-statement | inference | preference | unknown
+  state: aligned | gap | conflict | unknown
+  route: none | goal-candidate | retain | external
+
+Generated fields:
+  mode, subject/boundary continuity, revision, retained items, change,
+  previous_item_id, source_refs, lenses, lens_index, delta evidence,
+  item ids, bindings, time, and hashes.
+
+Exit status: 0 on materialization; 1 without output on refusal.
+All detected public-input errors are returned together with field paths.
+"""
+
+
+def parser() -> argparse.ArgumentParser:
+    result = argparse.ArgumentParser(add_help=False)
+    result.add_argument("--help", action="store_true")
+    result.add_argument("--input")
+    result.add_argument("--output")
+    result.add_argument("--bind", action="append", default=[])
+    result.add_argument("--null-bind", action="append", default=[])
+    return result
+
+
+def load_json(path: Path, label: str, errors: list[str]) -> Any:
+    try:
+        return json.loads(path.read_bytes())
+    except (OSError, json.JSONDecodeError) as error:
+        errors.append(f"{label}: cannot read JSON: {error}")
+        return None
+
+
+def exact_object(value: Any, path: str, required: set[str], optional: set[str], errors: list[str]) -> bool:
+    if not isinstance(value, dict):
+        errors.append(f"{path}: must be an object")
+        return False
+    for key in sorted(required - set(value)):
+        errors.append(f"{path}.{key}: required field is missing")
+    for key in sorted(set(value) - required - optional):
+        errors.append(f"{path}.{key}: field is not accepted")
+    return True
+
+
+def text(value: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(value, str) or not value:
+        errors.append(f"{path}: must be a nonempty string")
+
+
+def text_list(value: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(value, list) or not value:
+        errors.append(f"{path}: must be a nonempty array of unique nonempty strings")
+        return
+    seen: set[str] = set()
+    for index, item in enumerate(value):
+        if not isinstance(item, str) or not item:
+            errors.append(f"{path}[{index}]: must be a nonempty string")
+        elif item in seen:
+            errors.append(f"{path}[{index}]: duplicates {item!r}")
+        else:
+            seen.add(item)
+
+
+def delta(value: Any, path: str, errors: list[str]) -> None:
+    if not exact_object(value, path, {"summary", "evidence_refs"}, set(), errors):
+        return
+    text(value.get("summary"), f"{path}.summary", errors)
+    text_list(value.get("evidence_refs"), f"{path}.evidence_refs", errors)
+
+
+def semantic_item(value: Any, path: str, errors: list[str]) -> dict[str, Any] | None:
+    required = {"lens", "epistemic_kind", "state", "statement", "evidence_refs", "route"}
+    if not exact_object(value, path, required, {"route_ref"}, errors):
+        return None
+    for key in ("lens", "statement"):
+        if key in value:
+            text(value[key], f"{path}.{key}", errors)
+    if "epistemic_kind" in value and value["epistemic_kind"] not in KINDS:
+        errors.append(f"{path}.epistemic_kind: must be one of {sorted(KINDS)}")
+    if "state" in value and value["state"] not in STATES:
+        errors.append(f"{path}.state: must be one of {sorted(STATES)}")
+    if "evidence_refs" in value:
+        text_list(value["evidence_refs"], f"{path}.evidence_refs", errors)
+    route = value.get("route")
+    if route not in ROUTES:
+        errors.append(f"{path}.route: must be one of {sorted(ROUTES)}")
+    elif route == "external":
+        if "route_ref" not in value:
+            errors.append(f"{path}.route_ref: required when route is external")
+        else:
+            text(value["route_ref"], f"{path}.route_ref", errors)
+    elif "route_ref" in value:
+        errors.append(f"{path}.route_ref: must be omitted unless route is external")
+    return value
+
+
+def additions(value: Any, path: str, errors: list[str], require_nonempty: bool) -> list[tuple[int, dict[str, Any]]]:
+    if not isinstance(value, list) or (require_nonempty and not value):
+        qualifier = "nonempty " if require_nonempty else ""
+        errors.append(f"{path}: must be a {qualifier}array")
+        return []
+    result: list[tuple[int, dict[str, Any]]] = []
+    for index, entry in enumerate(value):
+        entry_path = f"{path}[{index}]"
+        if not exact_object(entry, entry_path, {"reason", "item"}, set(), errors):
+            continue
+        text(entry.get("reason"), f"{entry_path}.reason", errors)
+        item = semantic_item(entry.get("item"), f"{entry_path}.item", errors)
+        if item is not None:
+            result.append((index, entry))
+    return result
+
+
+def item_id(value: Any, path: str, errors: list[str]) -> None:
+    if not isinstance(value, str) or ITEM_ID.fullmatch(value) is None:
+        errors.append(f"{path}: must match item-[0-9a-f]{{16}}")
+
+
+def evidence_closure(candidate: dict[str, Any], changed: list[tuple[str, dict[str, Any]]], retired: list[tuple[str, dict[str, Any]]], errors: list[str]) -> None:
+    delta_value = candidate.get("delta")
+    if not isinstance(delta_value, dict) or not isinstance(delta_value.get("evidence_refs"), list):
+        return
+    delta_refs = {ref for ref in delta_value["evidence_refs"] if isinstance(ref, str) and ref}
+    supported: set[str] = set()
+    for path, item in changed:
+        refs = item.get("evidence_refs")
+        if not isinstance(refs, list):
+            continue
+        valid_refs = {ref for ref in refs if isinstance(ref, str) and ref}
+        supported.update(valid_refs)
+        if valid_refs.isdisjoint(delta_refs):
+            errors.append(f"{path}.evidence_refs: must cite at least one input.delta.evidence_refs entry")
+    for path, entry in retired:
+        refs = entry.get("evidence_refs")
+        if not isinstance(refs, list):
+            continue
+        for index, ref in enumerate(refs):
+            if isinstance(ref, str) and ref:
+                supported.add(ref)
+                if ref not in delta_refs:
+                    errors.append(f"{path}.evidence_refs[{index}]: must occur in input.delta.evidence_refs")
+    for index, ref in enumerate(delta_value["evidence_refs"]):
+        if isinstance(ref, str) and ref and ref not in supported:
+            errors.append(f"input.delta.evidence_refs[{index}]: must support an update, addition, or retirement")
+
+
+def preflight(candidate: Any, previous: dict[str, Any] | None) -> list[str]:
+    errors: list[str] = []
+    if previous is None:
+        required = {"subject", "boundary", "cutoff", "delta", "additions"}
+        if not exact_object(candidate, "input", required, set(), errors):
+            return errors
+        for key in ("subject", "boundary", "cutoff"):
+            if key in candidate:
+                text(candidate[key], f"input.{key}", errors)
+        if "delta" in candidate:
+            delta(candidate["delta"], "input.delta", errors)
+        valid_additions = additions(candidate.get("additions"), "input.additions", errors, True)
+        evidence_closure(candidate, [(f"input.additions[{index}].item", entry["item"]) for index, entry in valid_additions], [], errors)
+        return errors
+
+    required = {"cutoff", "delta"}
+    optional = {"updates", "additions", "retirements"}
+    if not exact_object(candidate, "input", required, optional, errors):
+        return errors
+    if "cutoff" in candidate:
+        text(candidate["cutoff"], "input.cutoff", errors)
+    if "delta" in candidate:
+        delta(candidate["delta"], "input.delta", errors)
+
+    raw_updates = candidate.get("updates", [])
+    raw_additions = candidate.get("additions", [])
+    raw_retirements = candidate.get("retirements", [])
+    if not isinstance(raw_updates, list):
+        errors.append("input.updates: must be an array")
+        raw_updates = []
+    valid_additions = additions(raw_additions, "input.additions", errors, False)
+    if not isinstance(raw_retirements, list):
+        errors.append("input.retirements: must be an array")
+        raw_retirements = []
+    if not raw_updates and not raw_additions and not raw_retirements:
+        errors.append("input: at least one update, addition, or retirement is required")
+
+    try:
+        previous_items = previous["document"]["account"]["items"]
+        previous_by_id = {entry["item_id"]: entry for entry in previous_items}
+    except (KeyError, TypeError):
+        errors.append("previous_account.document.account.items: unavailable")
+        previous_by_id = {}
+
+    touched: dict[str, str] = {}
+    valid_updates: list[tuple[str, dict[str, Any]]] = []
+    valid_retirements: list[tuple[str, dict[str, Any]]] = []
+    for index, entry in enumerate(raw_updates):
+        path = f"input.updates[{index}]"
+        if not exact_object(entry, path, {"previous_item_id", "reason", "item"}, set(), errors):
+            continue
+        reference = entry.get("previous_item_id")
+        item_id(reference, f"{path}.previous_item_id", errors)
+        text(entry.get("reason"), f"{path}.reason", errors)
+        current = semantic_item(entry.get("item"), f"{path}.item", errors)
+        if current is not None:
+            valid_updates.append((f"{path}.item", current))
+        if isinstance(reference, str):
+            if reference in touched:
+                errors.append(f"{path}.previous_item_id: already used by {touched[reference]}")
+            else:
+                touched[reference] = path
+            predecessor = previous_by_id.get(reference)
+            if predecessor is None:
+                errors.append(f"{path}.previous_item_id: not found in previous Account")
+            elif current is not None:
+                normalized = {key: current.get(key) for key in ("lens", "epistemic_kind", "state", "statement", "evidence_refs", "route")}
+                normalized["route_ref"] = current.get("route_ref")
+                old = {key: predecessor.get(key) for key in normalized}
+                if normalized == old:
+                    errors.append(f"{path}.item: does not change the predecessor")
+
+    for index, entry in enumerate(raw_retirements):
+        path = f"input.retirements[{index}]"
+        if not exact_object(entry, path, {"previous_item_id", "reason", "evidence_refs"}, set(), errors):
+            continue
+        reference = entry.get("previous_item_id")
+        item_id(reference, f"{path}.previous_item_id", errors)
+        text(entry.get("reason"), f"{path}.reason", errors)
+        text_list(entry.get("evidence_refs"), f"{path}.evidence_refs", errors)
+        valid_retirements.append((path, entry))
+        if isinstance(reference, str):
+            if reference in touched:
+                errors.append(f"{path}.previous_item_id: already used by {touched[reference]}")
+            else:
+                touched[reference] = path
+            if reference not in previous_by_id:
+                errors.append(f"{path}.previous_item_id: not found in previous Account")
+    valid_changes = valid_updates + [(f"input.additions[{index}].item", entry["item"]) for index, entry in valid_additions]
+    evidence_closure(candidate, valid_changes, valid_retirements, errors)
+    return errors
+
+
+def refuse(errors: list[str]) -> int:
+    print(json.dumps({"ok": False, "error": "semantic input rejected", "errors": errors}, ensure_ascii=False, sort_keys=True), file=sys.stderr)
+    return 1
+
+
+def main() -> int:
+    args = parser().parse_args()
+    if args.help:
+        print(HELP, end="")
+        return 0
+    errors: list[str] = []
+    if not args.input:
+        errors.append("--input: required")
+    if not args.output:
+        errors.append("--output: required")
+
+    previous_path: Path | None = None
+    binding_modes = 0
+    for name in args.null_bind:
+        if name != "previous_account":
+            errors.append(f"--null-bind: unsupported binding {name!r}")
+        else:
+            binding_modes += 1
+    for word in args.bind:
+        if "=" not in word:
+            errors.append(f"--bind: expected previous_account=FILE, observed {word!r}")
+            continue
+        name, raw_path = word.split("=", 1)
+        if name != "previous_account":
+            errors.append(f"--bind: unsupported binding {name!r}")
+        else:
+            binding_modes += 1
+            previous_path = Path(raw_path)
+    if binding_modes != 1:
+        errors.append("binding: choose exactly one of --null-bind previous_account or --bind previous_account=FILE")
+    if errors:
+        return refuse(errors)
+
+    candidate = load_json(Path(args.input), "input", errors)
+    previous = load_json(previous_path, "previous_account", errors) if previous_path else None
+    if candidate is not None:
+        errors.extend(preflight(candidate, previous))
+    if errors:
+        return refuse(errors)
+
+    script_dir = Path(__file__).resolve().parent
+    skill_dir = script_dir.parent
+    candidates = [
+        os.environ.get("K4_STABLE_RESULT"),
+        shutil.which("stable-result"),
+        str(skill_dir.parent.parent / "tools" / "stable-result"),
+        str(skill_dir.parent.parent / "workspace" / "tools" / "stable-result"),
+    ]
+    tool = next((Path(value) for value in candidates if value and Path(value).is_file() and os.access(value, os.X_OK)), None)
+    if tool is None:
+        return refuse(["stable-result: executable is not available"])
+    command = [str(tool), "--contract", str(skill_dir / "assets" / "protocol.cue"), "materialize", "--input", args.input, "--output", args.output]
+    for name in args.null_bind:
+        command.extend(("--null-bind", name))
+    for word in args.bind:
+        command.extend(("--bind", word))
+    completed = subprocess.run(command, check=False)
+    return completed.returncode
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

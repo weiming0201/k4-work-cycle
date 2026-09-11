@@ -50,8 +50,15 @@ Skill-local scripts are the public entrypoints. Observe, Goal, Plan, and Finish
 materialize immutable documents. Run appends one event, projects its ledger,
 and validates either the ledger or its derived projection. Every stable JSON or
 JSONL output is Tool-generated; semantic input remains a temporary work product.
+Observe iteration accepts only changed, added, and retired semantics; its Tool
+derives the complete Account instead of requiring callers to maintain it.
 
-Release `0.6.0` gives Run exactly two terminal states, `plan-complete` and
+Release `0.7.0` replaces Observe's full-Account temporary input with a
+delta-only interface. The stable Observe schema remains v2; existing Account
+consumers do not migrate. The Tool now derives retained items, continuity,
+source references, lenses, indexes, ids, and envelope metadata.
+
+Release `0.6.0` gave Run exactly two terminal states, `plan-complete` and
 `abort`, while keeping operation `pass`/`fail` independent. Plan owns one
 explicit `on_abort` response: preserve evidence only or enter a separate finite
 abort route. Run may record abort only from an explicit external or recoverable

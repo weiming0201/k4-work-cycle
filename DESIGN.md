@@ -46,7 +46,8 @@ policy for fields that cannot be inferred. The `0.4.1` migration uses frozen
 ## 3. Five unequal contracts
 
 - Observe accepts a null predecessor or one exact Observe/Finish Account. It
-  preserves Account continuity and generates the lens index and opening report.
+  accepts only bootstrap semantics or an iteration delta, preserves Account
+  continuity, and generates the complete Account, lens index, and opening report.
 - Goal accepts one exact Observe Account and freezes one selected flat mandate,
   including its selection rationale, exact execution envelope, and sourceable
   judge identities.
@@ -109,7 +110,9 @@ rather than widening it at runtime.
 
 ## 6. Stable and temporary state
 
-Temporary semantic inputs may be edited during formation. Observe, Goal, Plan,
+Temporary semantic inputs may be edited during formation. Observe iteration
+inputs contain only changed, added, and retired semantics; retained items and
+all aggregate Account fields are mechanically derived. Observe, Goal, Plan,
 Finish, and Run projections are immutable materialized documents. A Run
 projection is valid only relative to its exact source ledger. Run events are
 immutable append-only facts. Stable structured outputs are created only by the
@@ -150,7 +153,8 @@ runtime, but provider behavior is outside this release.
 
 The isolated suite exercises one complete cycle, including:
 
-- multi-lens Observe bootstrap and Finish-to-Observe continuity;
+- multi-lens Observe bootstrap, delta-only Finish-to-Observe continuity,
+  automatic retention and source aggregation, and aggregate field diagnostics;
 - a frozen Goal that retains an unknown annotation;
 - rejection of a frozen Goal without acceptance and of an unavailable judge;
 - forward binary Plan routing with fork and join projections, separated normal

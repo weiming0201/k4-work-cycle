@@ -1,5 +1,13 @@
 # Versioned migration
 
+## 0.6.0 to 0.7.0
+
+No stable artifact migration is required. Release `0.7.0` changes only the
+temporary semantic input accepted by `k4-observe`: iteration now supplies a
+delta instead of reproducing the full Account. Stable Observe documents remain
+`k4-observe-document/v2`. Because the Account contract did not change, Observe
+may bind existing `k4-finish-document/v2`, v3, or v4 Accounts directly.
+
 Migration Tools target one exact released contract. The frozen target CUE for
 `0.5.0` is retained under `tools/contracts/0.5.0/`, so the older migration does
 not silently begin producing a newer schema.
