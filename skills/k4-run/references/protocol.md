@@ -11,8 +11,15 @@ event is either:
 - `abort-confirmed`: one sourced external cancellation or recoverable runtime
   failure fact that stops the normal route and activates the Plan-level abort
   response; or
-- `halt`: actual stop position, trigger, budget/effect evidence, evidence, and
+- `halt`: budget/effect evidence, evidence, and
   resume reference when one exists.
+
+Abort and halt positions and the halt trigger are derived from the ledger. The
+patch attempt and verification scope are fixed by the protocol. Empty optional
+unknowns and reference collections receive canonical defaults. Patch Findings
+are not optional: every emergency patch records at least one actual Finding;
+the Tool neither invents Finding text from the reason nor supplies an empty
+Finding collection.
 
 An operation is appended once, after it is activated by the Plan and every join
 dependency has a response. Its binary result alone selects the frozen successor

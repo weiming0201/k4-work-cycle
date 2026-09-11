@@ -3,10 +3,14 @@
 
 from __future__ import annotations
 
+import json
 import os
 from pathlib import Path
 import shutil
+import subprocess
 import sys
+import tempfile
+from typing import Any
 
 
 HELP = """Usage: materialize --input FILE --output FILE --run-log FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE
@@ -22,13 +26,23 @@ Options:
   --bind plan=FILE              exact executable Plan
 
 Semantic input:
-  subject, boundary, cutoff, source_refs, lenses, delta, items, retired
-  items[] include lens; lenses must equal the opening Account lenses
-  acceptance_results[]: {id, judge_ref, result, actual_refs, comparison_refs, evidence_refs, unknowns}
-  terminal_control_results[]: same fields, one per terminal control
-  result: pass | fail; unknowns are annotations, not result states
+  cutoff and delta
+  updates[]: {previous_item_id, reason, item}; omission means empty
+  additions[]: {reason, item}; omission means empty
+  retirements[]: {previous_item_id, reason, evidence_refs}; omission means empty
+  item: {lens, epistemic_kind, state, statement, evidence_refs, route, route_ref?}
+  route_ref is required only when route is external and must otherwise be absent or null.
+  goal-candidate is not valid in a closing Finish Account.
+  acceptance_results[]: {id, result, actual_refs, comparison_refs, evidence_refs, unknowns?}
+  terminal_control_results[]: same fields, one per terminal control; omission is
+    generated as [] only when the bound Goal has no terminal controls
+  each judgment result: pass | fail; unknowns are annotations, not result states
   result_disposition: {state, statement, refs}
-  incomplete_deliverable: null for pass; nonempty for fail
+  incomplete_deliverable: required only for fail
+
+The Tool carries unmentioned predecessors forward, derives Account continuity,
+sources, lenses, ids, and exact Goal judge refs, and supplies canonical null or
+empty fields. Former full inputs remain accepted when consistent.
 
 Output:
   The stable Finish envelope binds the exact Run ledger and stores the next
@@ -36,6 +50,241 @@ Output:
 
 Exit status: 0 on materialization; 1 without output on refusal.
 """
+
+
+def argument(arguments: list[str], name: str) -> str:
+    for index, word in enumerate(arguments):
+        if word == name and index + 1 < len(arguments):
+            return arguments[index + 1]
+        if word.startswith(f"{name}="):
+            return word.split("=", 1)[1]
+    raise ValueError(f"{name} FILE is required")
+
+
+def bindings(arguments: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for index, word in enumerate(arguments):
+        if word == "--bind" and index + 1 < len(arguments) and "=" in arguments[index + 1]:
+            name, path = arguments[index + 1].split("=", 1)
+            result[name] = path
+    return result
+
+
+def unique(values: list[str]) -> list[str]:
+    result: list[str] = []
+    for value in values:
+        if value not in result:
+            result.append(value)
+    return result
+
+
+def add_error(errors: list[str], message: str) -> None:
+    if message not in errors:
+        errors.append(message)
+
+
+def require_fields(value: Any, path: str, fields: tuple[str, ...], errors: list[str]) -> bool:
+    if not isinstance(value, dict):
+        add_error(errors, f"{path}: must be an object")
+        return False
+    for field in fields:
+        if field not in value:
+            add_error(errors, f"{path}.{field}: required field is missing")
+    return True
+
+
+def preflight_item(value: Any, path: str, errors: list[str]) -> None:
+    fields = ("lens", "epistemic_kind", "state", "statement", "evidence_refs", "route")
+    if not require_fields(value, path, fields, errors):
+        return
+    route = value.get("route")
+    route_ref = value.get("route_ref")
+    if route == "goal-candidate":
+        add_error(errors, f"{path}.route: goal-candidate is not valid in a closing Finish Account")
+    elif route == "external":
+        if not isinstance(route_ref, str) or not route_ref:
+            add_error(errors, f"{path}.route_ref: required as a nonempty string when route is external")
+    elif route in {"none", "retain"}:
+        if "route_ref" in value and route_ref is not None:
+            add_error(errors, f"{path}.route_ref: must be absent or null unless route is external")
+
+
+def preflight(value: Any, previous: dict, goal: dict) -> list[str]:
+    errors: list[str] = []
+    if not isinstance(value, dict):
+        return ["input: expected one JSON object"]
+
+    terminal_controls = [
+        entry for entry in goal.get("control_contracts", [])
+        if entry.get("check_timing") == "terminal"
+    ]
+    if "terminal_control_results" not in value and terminal_controls:
+        add_error(errors, "input.terminal_control_results: required because the bound Goal has terminal controls")
+
+    if "items" in value:
+        return errors
+
+    collections: dict[str, list[Any]] = {}
+    for name in ("updates", "additions", "retirements"):
+        candidate = value.get(name, [])
+        if not isinstance(candidate, list):
+            add_error(errors, f"input.{name}: must be an array")
+            candidate = []
+        collections[name] = candidate
+
+    previous_ids = {
+        item.get("item_id") for item in previous.get("items", [])
+        if isinstance(item, dict) and isinstance(item.get("item_id"), str)
+    }
+    update_paths: dict[str, list[str]] = {}
+    retirement_paths: dict[str, list[str]] = {}
+
+    for index, entry in enumerate(collections["updates"]):
+        path = f"input.updates[{index}]"
+        if not require_fields(entry, path, ("previous_item_id", "reason", "item"), errors):
+            continue
+        reference = entry.get("previous_item_id")
+        reference_path = f"{path}.previous_item_id"
+        if not isinstance(reference, str) or not reference:
+            add_error(errors, f"{reference_path}: must be a nonempty item id")
+        else:
+            update_paths.setdefault(reference, []).append(reference_path)
+            if reference not in previous_ids:
+                add_error(errors, f"{reference_path}: not found in the opening Account")
+        preflight_item(entry.get("item"), f"{path}.item", errors)
+
+    for paths in update_paths.values():
+        if len(paths) > 1:
+            for path in paths:
+                add_error(errors, f"{path}: duplicates another update predecessor")
+
+    for index, entry in enumerate(collections["retirements"]):
+        path = f"input.retirements[{index}]"
+        if not require_fields(entry, path, ("previous_item_id", "reason", "evidence_refs"), errors):
+            continue
+        reference = entry.get("previous_item_id")
+        reference_path = f"{path}.previous_item_id"
+        if isinstance(reference, str) and reference:
+            retirement_paths.setdefault(reference, []).append(reference_path)
+
+    for reference in sorted(set(update_paths) & set(retirement_paths)):
+        for path in update_paths[reference] + retirement_paths[reference]:
+            add_error(errors, f"{path}: the same predecessor cannot be both updated and retired")
+
+    for index, entry in enumerate(collections["additions"]):
+        path = f"input.additions[{index}]"
+        if not require_fields(entry, path, ("reason", "item"), errors):
+            continue
+        preflight_item(entry.get("item"), f"{path}.item", errors)
+    return errors
+
+
+def semantic_item(item: dict) -> dict:
+    result = {key: item[key] for key in ("lens", "epistemic_kind", "state", "statement", "evidence_refs", "route")}
+    result["route_ref"] = item.get("route_ref") if item.get("route") == "external" else None
+    return result
+
+
+def normalize(value: object, previous: dict, goal: dict, events: list[dict]) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("input: expected one JSON object")
+    if "items" not in value:
+        updates = value.pop("updates", [])
+        additions = value.pop("additions", [])
+        retirements = value.pop("retirements", [])
+        update_by_id = {entry["previous_item_id"]: entry for entry in updates}
+        retired_ids = {entry["previous_item_id"] for entry in retirements}
+        items: list[dict] = []
+        for prior in previous["items"]:
+            if prior["item_id"] in retired_ids:
+                continue
+            update = update_by_id.get(prior["item_id"])
+            if update is None:
+                retained = semantic_item(prior)
+                retained.update({
+                    "change": "retained",
+                    "previous_item_id": prior["item_id"],
+                    "change_reason": "Unmentioned by the closing semantic delta; prior item retained.",
+                })
+                items.append(retained)
+            else:
+                changed = semantic_item(update["item"])
+                changed.update({
+                    "change": "changed",
+                    "previous_item_id": prior["item_id"],
+                    "change_reason": update["reason"],
+                })
+                items.append(changed)
+        for addition in additions:
+            added = semantic_item(addition["item"])
+            added.update({"change": "added", "previous_item_id": None, "change_reason": addition["reason"]})
+            items.append(added)
+        value["items"] = items
+        value["retired"] = retirements
+
+    value.setdefault("subject", previous["subject"])
+    value.setdefault("boundary", previous["boundary"])
+    value.setdefault("lenses", previous["lenses"])
+    for item in value["items"]:
+        item["route_ref"] = item.get("route_ref") if item.get("route") == "external" else None
+
+    point_judges = {entry["point_id"]: entry["judge"]["ref"] for entry in goal["acceptance_points"]}
+    control_judges = {
+        entry["control_id"]: entry["judge"]["ref"]
+        for entry in goal["control_contracts"]
+        if entry["check_timing"] == "terminal"
+    }
+    if not control_judges:
+        value.setdefault("terminal_control_results", [])
+    for result in value.get("acceptance_results", []):
+        result.setdefault("judge_ref", point_judges.get(result.get("id")))
+        result.setdefault("unknowns", [])
+    for result in value.get("terminal_control_results", []):
+        result.setdefault("judge_ref", control_judges.get(result.get("id")))
+        result.setdefault("unknowns", [])
+    value.setdefault("incomplete_deliverable", None)
+
+    if "source_refs" not in value:
+        item_refs = [ref for item in value["items"] for ref in item["evidence_refs"]]
+        retired_refs = [ref for item in value["retired"] for ref in item["evidence_refs"]]
+        acceptance_refs = [ref for result in value.get("acceptance_results", []) for ref in result["evidence_refs"]]
+        terminal_refs = [ref for result in value.get("terminal_control_results", []) for ref in result["evidence_refs"]]
+        acceptance_unknown_refs = [
+            ref for result in value.get("acceptance_results", []) for unknown in result["unknowns"] for ref in unknown["basis_refs"]
+        ]
+        terminal_unknown_refs = [
+            ref for result in value.get("terminal_control_results", []) for unknown in result["unknowns"] for ref in unknown["basis_refs"]
+        ]
+        operation_finding_refs: list[str] = []
+        operation_unknown_refs: list[str] = []
+        patch_finding_refs: list[str] = []
+        patch_unknown_refs: list[str] = []
+        abort_refs: list[str] = []
+        for envelope in events:
+            event = envelope.get("event", {})
+            if event.get("kind") == "operation-result":
+                operation_finding_refs.extend(ref for finding in event.get("findings", []) for ref in finding["evidence_refs"])
+                operation_unknown_refs.extend(ref for unknown in event.get("unknowns", []) for ref in unknown["basis_refs"])
+            elif event.get("kind") == "emergency-patch":
+                patch_finding_refs.extend(ref for finding in event.get("findings", []) for ref in finding["evidence_refs"])
+                patch_unknown_refs.extend(ref for unknown in event.get("unknowns", []) for ref in unknown["basis_refs"])
+            elif event.get("kind") == "abort-confirmed":
+                abort_refs.extend(event.get("evidence_refs", []))
+            elif event.get("kind") == "halt" and event.get("trigger") == "abort":
+                abort_refs.extend(event.get("evidence_refs", []))
+                abort_refs.extend(event.get("budget_evidence_refs", []))
+                abort_refs.extend(event.get("side_effect_evidence_refs", []))
+        all_evidence = set(
+            item_refs + retired_refs + acceptance_refs + terminal_refs + acceptance_unknown_refs + terminal_unknown_refs
+            + operation_finding_refs + operation_unknown_refs + patch_finding_refs + patch_unknown_refs + abort_refs
+        )
+        ordered = (
+            previous["source_refs"] + value["delta"]["evidence_refs"] + item_refs + retired_refs
+            + acceptance_refs + terminal_refs + operation_finding_refs + operation_unknown_refs
+            + patch_finding_refs + patch_unknown_refs + acceptance_unknown_refs + terminal_unknown_refs + abort_refs
+        )
+        value["source_refs"] = unique([ref for ref in ordered if ref in all_evidence])
+    return value
 
 
 def main() -> int:
@@ -59,6 +308,7 @@ def main() -> int:
         print("stable-result is not available", file=sys.stderr)
         return 1
 
+    arguments = sys.argv[1:]
     forwarded: list[str] = []
     run_log: str | None = None
     index = 1
@@ -81,23 +331,52 @@ def main() -> int:
         print("--run-log FILE is required", file=sys.stderr)
         return 1
 
-    command = [
-        str(tool),
-        "--contract",
-        str(skill_dir / "assets" / "protocol.cue"),
-        "materialize",
-        *forwarded,
-        "--project-log-bind",
-        f"run={run_log}",
-        "--projection-contract",
-        str(run_contract),
-        "--projection-bind",
-        "goal",
-        "--projection-bind",
-        "plan",
-    ]
-    os.execv(str(tool), command)
-    return 1
+    try:
+        source_name = argument(arguments, "--input")
+        bound = bindings(arguments)
+        previous = json.loads(Path(bound["previous_account"]).read_text())["document"]["account"]
+        goal = json.loads(Path(bound["goal"]).read_text())["document"]
+        events = [json.loads(line) for line in Path(run_log).read_text().splitlines() if line.strip()]
+        raw = json.loads(Path(source_name).read_text())
+        errors = preflight(raw, previous, goal)
+        if errors:
+            print(json.dumps({"ok": False, "error": "semantic input rejected", "errors": errors}, ensure_ascii=False, sort_keys=True), file=sys.stderr)
+            return 1
+        normalized = normalize(raw, previous, goal, events)
+    except (KeyError, OSError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    temporary_name = ""
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as temporary:
+            json.dump(normalized, temporary, ensure_ascii=False, indent=2, sort_keys=True)
+            temporary.write("\n")
+            temporary_name = temporary.name
+        normalized_forwarded: list[str] = []
+        index = 0
+        while index < len(forwarded):
+            if forwarded[index] == "--input" and index + 1 < len(forwarded):
+                normalized_forwarded.extend(("--input", temporary_name))
+                index += 2
+                continue
+            if forwarded[index].startswith("--input="):
+                normalized_forwarded.append(f"--input={temporary_name}")
+            else:
+                normalized_forwarded.append(forwarded[index])
+            index += 1
+        command = [
+            str(tool), "--contract", str(skill_dir / "assets" / "protocol.cue"), "materialize",
+            *normalized_forwarded,
+            "--project-log-bind", f"run={run_log}",
+            "--projection-contract", str(run_contract),
+            "--projection-bind", "goal",
+            "--projection-bind", "plan",
+        ]
+        return subprocess.run(command, check=False).returncode
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
 
 
 if __name__ == "__main__":

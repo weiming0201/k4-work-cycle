@@ -1,63 +1,139 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env python3
+"""Normalize ledger-derived Run input, then delegate the atomic append to CUE."""
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-skill_dir=$(dirname -- "$script_dir")
-tool=${K4_STABLE_RESULT:-}
+from __future__ import annotations
 
-if [ "${1:-}" = "--help" ]; then
-    printf '%s\n' \
-        'Usage: append --input FILE --log FILE --bind goal=FILE --bind plan=FILE' \
-        '' \
-        'Append one immutable Run event from temporary semantic JSON.' \
-        '' \
-        'Options:' \
-        '  --input FILE      JSON object containing exactly one event below' \
-        '  --log FILE        append-only JSONL ledger; may be absent initially' \
-        '  --bind goal=FILE  exact frozen Goal' \
-        '  --bind plan=FILE  exact executable Plan' \
-        '' \
-        'Event inputs:' \
-        '  operation-result: {kind, operation_id, result, eligibility_refs,' \
-        '    actual_output_refs, evidence_refs, trace_refs, invariant_checks,' \
-        '    findings, unknowns}' \
-        '  invariant_checks[]: {control_id, result, actual_refs, trace_refs,' \
-        '    comparison_refs, evidence_refs}' \
-        '  findings[]: {statement, evidence_refs}' \
-        '  unknowns[]: {statement, basis_refs}' \
-        '  emergency-patch: {kind, operation_id, attempt: 1, application_result,' \
-        '    reason, script_ref, tool_refs, permission_refs, read_refs, write_refs,' \
-        '    resource_refs, maximum_side_effects, actual_side_effect_refs, trace_refs,' \
-        '    findings, unknowns, verification_scope: mainline-resumption-only}' \
-        '  abort-confirmed: {kind, after_operation_id, source_ref, reason, evidence_refs}' \
-        '  halt: {kind, after_operation_id, trigger,' \
-        '    budget_evidence_refs, side_effect_evidence_refs, evidence_refs,' \
-        '    resume_ref}' \
-        '  result: pass | fail' \
-        '  application_result: applied | not-applied' \
-        '  trigger: plan-complete | abort' \
-        '  emergency-patch tools, permissions, positions, resources, and effects' \
-        '    must remain inside the frozen Goal execution envelope' \
-        '' \
-        'Output:' \
-        '  One generated operation-result, emergency-patch, abort-confirmed, or halt event is appended.' \
-        '' \
-        'Exit status: 0 after one append; 1 without append on invalid input.'
-    exit 0
-fi
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
 
-if [ -z "$tool" ]; then
-    tool=$(command -v stable-result || true)
-fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
-    tool="$skill_dir/../../tools/stable-result"
-fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
-    tool="$skill_dir/../../workspace/tools/stable-result"
-fi
-if [ -z "$tool" ]; then
-    echo "stable-result is not available" >&2
-    exit 1
-fi
 
-exec "$tool" --contract "$skill_dir/assets/protocol.cue" append "$@"
+HELP = """Usage: append --input FILE --log FILE --bind goal=FILE --bind plan=FILE
+
+Append one immutable Run event from temporary semantic JSON.
+
+Event input:
+  operation-result: {kind, operation_id, result, eligibility_refs,
+    actual_output_refs, evidence_refs, trace_refs, invariant_checks,
+    findings?, unknowns?}
+  emergency-patch: {kind, operation_id, application_result, reason, script_ref,
+    tool_refs, permission_refs, read_refs?, write_refs, resource_refs,
+    maximum_side_effects, actual_side_effect_refs, trace_refs, findings, unknowns?}
+  abort-confirmed: {kind, source_ref, reason, evidence_refs}
+  halt: {kind, budget_evidence_refs?, side_effect_evidence_refs?, evidence_refs,
+    resume_ref?}
+
+The Tool fixes patch attempt and verification scope, derives abort/halt position
+and halt trigger from the ledger, and supplies canonical empty annotations.
+Actual execution facts, evidence, Findings, unknowns, effects, and resume facts
+remain semantic input. Explicit compatibility values must equal derived values.
+
+Exit status: 0 after one append; 1 without append on invalid input.
+"""
+
+
+def tool_path(skill_dir: Path) -> str | None:
+    configured = os.environ.get("K4_STABLE_RESULT")
+    if configured:
+        return configured
+    found = shutil.which("stable-result")
+    if found:
+        return found
+    for candidate in (skill_dir.parent.parent / "tools" / "stable-result", skill_dir.parent.parent / "workspace" / "tools" / "stable-result"):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def named_argument(arguments: list[str], name: str) -> tuple[int, str, bool]:
+    for index, word in enumerate(arguments):
+        if word == name and index + 1 < len(arguments):
+            return index + 1, arguments[index + 1], False
+        if word.startswith(f"{name}="):
+            return index, word.split("=", 1)[1], True
+    raise ValueError(f"input: {name} FILE is required")
+
+
+def ledger_events(path: Path) -> list[dict]:
+    if not path.exists():
+        return []
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()]
+
+
+def normalize(value: object, events: list[dict]) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("input: expected one JSON object")
+    kind = value.get("kind")
+    operation_events = [entry for entry in events if entry.get("event", {}).get("kind") == "operation-result"]
+    last_operation_id = operation_events[-1]["event"]["operation_id"] if operation_events else None
+    aborted = any(entry.get("event", {}).get("kind") == "abort-confirmed" for entry in events)
+
+    if kind == "operation-result":
+        for field in ("actual_output_refs", "evidence_refs", "invariant_checks", "findings", "unknowns"):
+            value.setdefault(field, [])
+    elif kind == "emergency-patch":
+        value.setdefault("attempt", 1)
+        value.setdefault("verification_scope", "mainline-resumption-only")
+        if not isinstance(value.get("findings"), list) or not value["findings"]:
+            raise ValueError("input.findings: emergency-patch requires at least one actual Finding")
+        for field in ("read_refs", "unknowns"):
+            value.setdefault(field, [])
+    elif kind == "abort-confirmed":
+        if "after_operation_id" in value and value["after_operation_id"] != last_operation_id:
+            raise ValueError("input.after_operation_id: contradicts the current Run ledger head")
+        value["after_operation_id"] = last_operation_id
+    elif kind == "halt":
+        expected_trigger = "abort" if aborted else "plan-complete"
+        if "after_operation_id" in value and value["after_operation_id"] != last_operation_id:
+            raise ValueError("input.after_operation_id: contradicts the current Run ledger head")
+        if "trigger" in value and value["trigger"] != expected_trigger:
+            raise ValueError("input.trigger: contradicts the current Run ledger state")
+        value["after_operation_id"] = last_operation_id
+        value["trigger"] = expected_trigger
+        value.setdefault("budget_evidence_refs", [])
+        value.setdefault("side_effect_evidence_refs", [])
+        value.setdefault("resume_ref", None)
+    return value
+
+
+def main() -> int:
+    if sys.argv[1:] == ["--help"]:
+        print(HELP, end="")
+        return 0
+    skill_dir = Path(__file__).resolve().parents[1]
+    tool = tool_path(skill_dir)
+    if tool is None:
+        print("stable-result is not available", file=sys.stderr)
+        return 1
+    arguments = sys.argv[1:]
+    try:
+        input_position, source_name, input_inline = named_argument(arguments, "--input")
+        _, log_name, _ = named_argument(arguments, "--log")
+        normalized = normalize(json.loads(Path(source_name).read_text()), ledger_events(Path(log_name)))
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    temporary_name = ""
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as temporary:
+            json.dump(normalized, temporary, ensure_ascii=False, indent=2, sort_keys=True)
+            temporary.write("\n")
+            temporary_name = temporary.name
+        forwarded = list(arguments)
+        forwarded[input_position] = f"--input={temporary_name}" if input_inline else temporary_name
+        return subprocess.run(
+            [tool, "--contract", str(skill_dir / "assets" / "protocol.cue"), "append", *forwarded],
+            check=False,
+        ).returncode
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

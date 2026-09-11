@@ -52,7 +52,7 @@ def manifest_input(root: Path) -> dict[str, Any]:
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.7.0",
+        "extension_version": "0.8.0",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",

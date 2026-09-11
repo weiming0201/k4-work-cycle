@@ -50,19 +50,26 @@ policy for fields that cannot be inferred. The `0.4.1` migration uses frozen
   continuity, and generates the complete Account, lens index, and opening report.
 - Goal accepts one exact Observe Account and freezes one selected flat mandate,
   including its selection rationale, exact execution envelope, and sourceable
-  judge identities.
+  judge identities. Its source inventory and canonical empty collections are
+  generated from the bound Account and retained semantics.
 - Plan accepts one exact frozen Goal and freezes one selected forward binary
   operation DAG, including its selection rationale, topology projection, and
   Plan-level abort response.
+  Roots, phases, join dependencies, identities, coverage, and topology are
+  graph projections rather than caller-maintained fields.
   Every operational permission, position, resource, tool, and maximum effect
   is mechanically contained by the Goal envelope.
 - Run accepts one exact Goal, Plan, existing ledger, and candidate event. It
   validates graph activation and appends only operation, patch,
-  abort-confirmation, or halt facts.
+  abort-confirmation, or halt facts. Fixed patch fields and ledger-determined
+  terminal fields are generated before append; an actual patch Finding is not
+  generated and remains required semantic input.
 - Finish accepts the exact opening Account, Goal, Plan, and halted Run ledger.
-  The Tool derives its Run projection, then derives the settlement report and
-  materializes the next Account. Its judgments identify the exact judges
-  frozen by Goal.
+  Its semantic input is a closing Account delta plus actual judgments and
+  disposition. The Tool derives its Run projection, complete next Account,
+  settlement report, exact judges frozen by Goal, and the uniquely empty
+  terminal-result collection. Raw delta identity and route relations are
+  preflighted before any lossy dictionary or set projection.
 
 Every binding includes the referenced schema, raw-file digest, and semantic
 content digest. It proves the exact consumed bytes, not their truth or a
@@ -90,8 +97,8 @@ the closing settlement report. Neither report is a second ledger.
 ## 5. Graph and journal
 
 Plan input uses operation indices so a caller does not hand-generate content
-identities. The contract generates operation ids and replaces index references
-with exact ids. Every operation is either `normal` or `abort`; dependencies and
+identities. The Tool derives normal roots, phases and join barriers, generates
+operation ids, and replaces index references with exact ids. Dependencies and
 result edges must point forward and cannot cross phases. Plan owns one
 `on_abort` response: `preserve-only`, or a separate abort-route entry. It
 derives start, fork, join, and end positions from the selected graph.
@@ -110,10 +117,12 @@ rather than widening it at runtime.
 
 ## 6. Stable and temporary state
 
-Temporary semantic inputs may be edited during formation. Observe iteration
-inputs contain only changed, added, and retired semantics; retained items and
-all aggregate Account fields are mechanically derived. Observe, Goal, Plan,
-Finish, and Run projections are immutable materialized documents. A Run
+Temporary semantic inputs may be edited during formation. Minimized Observe
+iteration and Finish settlement inputs contain changed, added, and retired
+Account semantics; retained items and all aggregate Account fields are
+mechanically derived. Goal sources and canonical empty collections, Plan graph
+projections, and Run's fixed or ledger-determined fields are also generated.
+Observe, Goal, Plan, Finish, and Run projections are immutable materialized documents. A Run
 projection is valid only relative to its exact source ledger. Run events are
 immutable append-only facts. Stable structured outputs are created only by the
 Tool and are never hand-patched.

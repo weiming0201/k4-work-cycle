@@ -18,8 +18,10 @@ if [ "${1:-}" = "--help" ]; then
         '' \
         'Semantic input:' \
         '  objective, selection_rationale, target: nonempty strings' \
-        '  observe_item_ids, source_refs, baseline_refs, scope: nonempty unique string arrays' \
-        '  non_goals: unique string array; may be empty' \
+        '  observe_item_ids, baseline_refs, scope: nonempty unique string arrays' \
+        '  source_refs are derived from selected Observe evidence, cutoff, baselines,' \
+        '    and source-bound self or independent judges' \
+        '  non_goals: optional unique string array; omission means empty' \
         '  evidence_cutoff: {at: nonempty string, included_refs: nonempty unique string array}' \
         '  execution_envelope: {authorization_ref, authorization_scope,' \
         '    authorization_claim_limit, available_tools, permission_refs,' \
@@ -32,7 +34,7 @@ if [ "${1:-}" = "--help" ]; then
         '    comparison_method, sampling_rule}' \
         '  acceptance_points[].required_evidence and acceptance.conditions:' \
         '    nonempty unique string arrays; their other semantic fields are strings' \
-        '  control_contracts[]: {statement, required_evidence, judge,' \
+        '  control_contracts[]: optional {statement, required_evidence, judge,' \
         '    controlled_variable, allowed_domain, forbidden_drift,' \
         '    required_trace, check_method, check_timing}' \
         '  required_evidence, allowed_domain, forbidden_drift, required_trace:' \
@@ -41,7 +43,7 @@ if [ "${1:-}" = "--help" ]; then
         '  judge: {kind, ref, claim_limit}; kind is self | independent-agent | script | human' \
         '  judge.ref must be sourceable according to kind: Goal source, available tool,' \
         '    or authorization_ref for human' \
-        '  blockers, unknowns: unique string arrays; may be empty' \
+        '  blockers, unknowns: optional unique string arrays; omission means empty' \
         '  nonempty blockers produce not-frozen; otherwise status is frozen.' \
         '  Unknowns are retained annotations; frozen requires at least one acceptance point.' \
         '' \

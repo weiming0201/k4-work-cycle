@@ -58,6 +58,9 @@ points, bounded judges, available tools, authority, resources, budget, maximum
 effects, and execution controls for one attempt. The execution envelope names
 the exact available tools, permissions, readable and writable positions,
 resources, and maximum effects; later stages may narrow but not enlarge it.
+The Tool derives the Goal's source inventory from selected Observe evidence,
+the frozen cutoff and baselines, and any source-bound judge. Canonically empty
+annotations and control collections need not be restated by the caller.
 
 When useful, Goal formation may compare two or three materially different
 candidates. The stable result retains only the selected Goal and a concise
@@ -79,7 +82,7 @@ useful, formation may compare two or three materially different DAGs; the
 stable result retains only the selected Plan and its concise selection
 rationale.
 
-Each real operation declares:
+Each stable real operation contains:
 
 - its `normal` or `abort` phase;
 - the Goal points and controls it serves;
@@ -87,6 +90,10 @@ Each real operation declares:
 - permissions, resources, and maximum side effects;
 - pre-checks, post-checks, idempotency, retry ceiling, and recovery;
 - exactly two result edges, `pass` and `fail`.
+
+The caller selects operation content and the two result edges. The Tool derives
+normal entries, normal/abort phase, join dependencies, identities, coverage,
+and topology from that selected graph and the Plan-level abort entry.
 
 Both result edges may point to the same successor. An edge with no successor
 reaches end; multiple successors form a fork. A join waits for all declared
@@ -123,7 +130,8 @@ either binary result and has no routing authority.
 If a significant Plan omission prevents the active operation, Run may make at
 most one emergency patch attempt for that operation. The patch records its
 reason, script, tools, exact positions, maximum and actual effects, trace,
-application result, Findings, and unknowns. Its tools, permissions, positions,
+application result, at least one actual Finding, and any unknowns. The Tool does
+not fabricate a Finding from the patch reason. Its tools, permissions, positions,
 resources, and maximum effects remain inside the Goal envelope. It is checked
 only far enough to resume the original operation; it receives no separate
 systematic test. Emergency patching applies only to normal operations. The
@@ -134,6 +142,10 @@ Run halts as:
 - `plan-complete` when every activated route has reached an end;
 - `abort` only after an explicit external cancellation or recoverable runtime
   fact is recorded and the Plan's frozen abort response has completed.
+
+The Tool derives the stop position and which of these two terminal meanings is
+available from the ledger. The caller supplies the actual halt evidence and
+any real resume location.
 
 An incomplete ledger is open, not an implicit terminal state. A failed normal
 operation follows its frozen fail edge and does not itself cause abort. Run does
@@ -151,13 +163,24 @@ Tool derives its current projection from those exact bytes. Finish may follow re
 references when settlement needs detail, but it does not repair the attempt or
 invent missing events.
 
-Finish performs two inseparable projections of one settlement:
+For minimized calls, Finish accepts the closing semantic delta, actual terminal
+judgments, result disposition, and failure-only incomplete content; compatible
+full inputs remain valid when they agree with the same derivation. It performs
+two inseparable projections of one settlement:
 
 1. it updates the same full Account opened by Observe, preserving subject,
-   boundary, and lenses while accounting for every predecessor item;
+   boundary, and lenses while mechanically carrying every unmentioned
+   predecessor item forward;
 2. it produces a completion report containing Goal judgments, actual and
    not-run operations, operation pass/fail counts, Findings, unknowns,
    emergency patches, halt, result placement, and incomplete work.
+
+Before projection, Finish rejects duplicate updates, update-retirement
+collisions, and update predecessors absent from the opening Account without
+choosing a collision winner. An item's `route_ref` is required only for
+`external`; closing items cannot expose `goal-candidate`, which belongs to the
+next Observe. Omitted terminal-control results become `[]` only when the bound
+Goal has no terminal controls; otherwise actual judgments remain required.
 
 Every Goal acceptance point and terminal control receives a binary judgment
 from the exact judge identity frozen by Goal. Unknowns remain attached

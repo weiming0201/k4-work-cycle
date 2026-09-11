@@ -1,61 +1,158 @@
-#!/bin/sh
-set -eu
+#!/usr/bin/env python3
+"""Normalize graph-derived Plan input, then delegate stable output to CUE."""
 
-script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-skill_dir=$(dirname -- "$script_dir")
-tool=${K4_STABLE_RESULT:-}
+from __future__ import annotations
 
-if [ "${1:-}" = "--help" ]; then
-    printf '%s\n' \
-        'Usage: materialize --input FILE --output FILE --bind goal=FILE' \
-        '' \
-        'Create one immutable Plan DAG from temporary semantic JSON and one exact Goal.' \
-        '' \
-        'Options:' \
-        '  --input FILE      JSON object with the semantic fields below' \
-        '  --output FILE     absent output path whose parent already exists' \
-        '  --bind goal=FILE  exact predecessor Goal' \
-        '' \
-        'Semantic input:' \
-        '  difference, selection_rationale: nonempty strings' \
-        '  route: {claim, supporting_refs, counter_refs}' \
-        '  entry_operation_indices: one or more zero-based starting operations' \
-        '  on_abort: {mode: preserve-only | route, entry_operation_index, reason}' \
-        '    preserve-only requires a null entry and no abort-phase operation' \
-        '    route requires one abort-phase entry operation' \
-        '  operations[]: {phase: normal | abort, operation_key, depends_on_indices, satisfies, controlled_by, tool_ref,' \
-        '    responsible_ref, read_refs, write_refs, permission_refs, resource_refs,' \
-        '    maximum_side_effects, pre_checks, post_checks, idempotency,' \
-        '    retry_limit, recovery, on_result}' \
-        '  on_result: {pass, fail}' \
-        '  each result edge: {next_operation_indices, reason}' \
-        '  blockers, unknowns' \
-        '' \
-        'Dependency indices identify earlier operations; result edges identify only later ones.' \
-        'An empty result successor reaches end; multiple successors form a fork.' \
-        'Multiple exact dependencies form a join and must all route to that operation.' \
-        'Normal and abort result edges remain in their own phase; abort operations cannot satisfy Goal points.' \
-        'Every operation tool, permission, read/write position, resource, and effect' \
-        'must be contained in the frozen Goal execution envelope.' \
-        '' \
-        'Output:' \
-        '  The stable Plan is stored in the output envelope under document.' \
-        'Exit status: 0 on materialization; 1 on invalid input or unsafe write.'
-    exit 0
-fi
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
 
-if [ -z "$tool" ]; then
-    tool=$(command -v stable-result || true)
-fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then
-    tool="$skill_dir/../../tools/stable-result"
-fi
-if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then
-    tool="$skill_dir/../../workspace/tools/stable-result"
-fi
-if [ -z "$tool" ]; then
-    echo "stable-result is not available" >&2
-    exit 1
-fi
 
-exec "$tool" --contract "$skill_dir/assets/protocol.cue" materialize "$@"
+HELP = """Usage: materialize --input FILE --output FILE --bind goal=FILE
+
+Create one immutable Plan DAG from temporary semantic JSON and one exact frozen Goal.
+
+Options:
+  --input FILE       JSON object containing Plan semantics and operation routes
+  --output FILE      absent output path whose parent already exists
+  --bind goal=FILE   exact frozen Goal
+
+Semantic input:
+  difference, selection_rationale: nonempty strings
+  route: {claim, supporting_refs, counter_refs}
+  on_abort: {mode: preserve-only | route, entry_operation_index, reason}
+  operations[]: {operation_key, satisfies, controlled_by, tool_ref,
+    responsible_ref, read_refs, write_refs, permission_refs, resource_refs,
+    maximum_side_effects, pre_checks, post_checks, idempotency, retry_limit,
+    recovery, on_result}
+  on_result: {pass, fail}; each result has next_operation_indices and reason
+  blockers, unknowns: optional unique string arrays; omission means empty
+
+The Tool derives normal roots, normal/abort phase, join dependencies, operation
+identities, Goal coverage, and start/fork/join/end topology. A caller may still
+supply the former derived graph fields only when they equal the derived values.
+Every operation boundary must remain inside the frozen Goal envelope.
+
+Output:
+  The stable Plan is stored in the output envelope under document.
+
+Exit status: 0 on materialization; 1 on invalid input or unsafe write.
+"""
+
+
+def tool_path(skill_dir: Path) -> str | None:
+    configured = os.environ.get("K4_STABLE_RESULT")
+    if configured:
+        return configured
+    found = shutil.which("stable-result")
+    if found:
+        return found
+    for candidate in (skill_dir.parent.parent / "tools" / "stable-result", skill_dir.parent.parent / "workspace" / "tools" / "stable-result"):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def input_argument(arguments: list[str]) -> tuple[int, str, bool]:
+    for index, word in enumerate(arguments):
+        if word == "--input" and index + 1 < len(arguments):
+            return index + 1, arguments[index + 1], False
+        if word.startswith("--input="):
+            return index, word.split("=", 1)[1], True
+    raise ValueError("input: --input FILE is required")
+
+
+def targets(operation: dict) -> list[int]:
+    result: list[int] = []
+    routes = operation.get("on_result", {})
+    for outcome in ("pass", "fail"):
+        for target in routes.get(outcome, {}).get("next_operation_indices", []):
+            if isinstance(target, int) and target not in result:
+                result.append(target)
+    return result
+
+
+def normalize(value: object) -> dict:
+    if not isinstance(value, dict):
+        raise ValueError("input: expected one JSON object")
+    operations = value.get("operations")
+    if not isinstance(operations, list) or not operations:
+        raise ValueError("input.operations: expected one nonempty array")
+    if not all(isinstance(operation, dict) for operation in operations):
+        raise ValueError("input.operations: every operation must be an object")
+
+    incoming: list[list[int]] = [[] for _ in operations]
+    outgoing = [targets(operation) for operation in operations]
+    for source, destinations in enumerate(outgoing):
+        for destination in destinations:
+            if 0 <= destination < len(operations) and source not in incoming[destination]:
+                incoming[destination].append(source)
+
+    abort = value.get("on_abort")
+    if not isinstance(abort, dict):
+        raise ValueError("input.on_abort: expected one object")
+    abort_indices: set[int] = set()
+    entry = abort.get("entry_operation_index")
+    if abort.get("mode") == "route" and isinstance(entry, int) and 0 <= entry < len(operations):
+        abort_indices.add(entry)
+        for source in range(len(operations)):
+            if source in abort_indices:
+                abort_indices.update(target for target in outgoing[source] if 0 <= target < len(operations))
+
+    for index, operation in enumerate(operations):
+        expected_phase = "abort" if index in abort_indices else "normal"
+        if "phase" in operation and operation["phase"] != expected_phase:
+            raise ValueError(f"input.operations[{index}].phase: contradicts the graph and on_abort entry")
+        operation["phase"] = expected_phase
+        if "depends_on_indices" not in operation:
+            operation["depends_on_indices"] = incoming[index] if len(incoming[index]) > 1 else []
+
+    expected_entries = [index for index in range(len(operations)) if index not in abort_indices and not incoming[index]]
+    if "entry_operation_indices" in value and value["entry_operation_indices"] != expected_entries:
+        raise ValueError("input.entry_operation_indices: contradicts normal graph roots")
+    value["entry_operation_indices"] = expected_entries
+    value.setdefault("blockers", [])
+    value.setdefault("unknowns", [])
+    return value
+
+
+def main() -> int:
+    if sys.argv[1:] == ["--help"]:
+        print(HELP, end="")
+        return 0
+    skill_dir = Path(__file__).resolve().parents[1]
+    tool = tool_path(skill_dir)
+    if tool is None:
+        print("stable-result is not available", file=sys.stderr)
+        return 1
+    arguments = sys.argv[1:]
+    try:
+        position, source_name, inline = input_argument(arguments)
+        normalized = normalize(json.loads(Path(source_name).read_text()))
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    temporary_name = ""
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as temporary:
+            json.dump(normalized, temporary, ensure_ascii=False, indent=2, sort_keys=True)
+            temporary.write("\n")
+            temporary_name = temporary.name
+        forwarded = list(arguments)
+        forwarded[position] = f"--input={temporary_name}" if inline else temporary_name
+        return subprocess.run(
+            [tool, "--contract", str(skill_dir / "assets" / "protocol.cue"), "materialize", *forwarded],
+            check=False,
+        ).returncode
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

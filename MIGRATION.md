@@ -1,5 +1,21 @@
 # Versioned migration
 
+## 0.7.0 to 0.8.0
+
+No stable artifact migration is required. Release `0.8.0` minimizes temporary
+caller input while retaining the Observe v2, Goal v6, Plan v7, Run v6, and
+Finish v4 stable schemas. Existing full inputs remain accepted when their
+formerly caller-maintained fields agree with deterministic derivation. New
+callers should use each entrypoint's current `--help`.
+
+The minimized Finish entrypoint refuses duplicate or unknown updates,
+update-retirement collisions, invalid closing routes, and missing required
+terminal judgments before materialization. It derives omitted
+`terminal_control_results: []` only for a zero-terminal-control Goal. The Run
+entrypoint continues to derive fixed patch metadata but requires every
+emergency patch to supply a nonempty actual Finding. These are temporary-input
+boundary corrections; stable documents and event schemas do not migrate.
+
 ## 0.6.0 to 0.7.0
 
 No stable artifact migration is required. Release `0.7.0` changes only the

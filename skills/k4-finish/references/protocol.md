@@ -4,6 +4,27 @@ Finish materializes one closing Account plus a closure report for one exact
 halted attempt. It binds the opening Account, Goal, Plan, and exact Run ledger;
 the Run projection used for settlement is derived mechanically from that ledger.
 
+The caller supplies a closing semantic delta (updates, additions, and
+retirements), actual acceptance and terminal-control judgments, result
+disposition, and failure-only incomplete content. The Tool carries every
+unmentioned predecessor forward and derives sources, continuity, judge refs,
+and canonical empty/null fields.
+
+Each update identifies one opening Account item and supplies its replacement
+item; an addition supplies a new item; a retirement identifies one opening item
+and its evidence. The same predecessor cannot occur in multiple updates or in
+both an update and a retirement, and every update predecessor must exist in the
+opening Account. These raw relations are checked before any projection so no
+caller meaning can be collapsed or discarded.
+
+An item declares `lens`, epistemic kind, state, statement, evidence, and route.
+`route_ref` is nonempty only for `external` and is otherwise absent in semantic
+input or canonical null in the stable document. A closing Finish Account cannot
+contain `goal-candidate`; only a later Observe can expose a future Goal
+candidate. If the bound Goal has no terminal controls, omission of
+`terminal_control_results` has the unique generated value `[]`; otherwise every
+terminal judgment remains required.
+
 The Account core is the same structured observation surface as Observe:
 subject, boundary, cutoff, sources, lenses, generated lens index, delta,
 current retained/changed/added items, retired predecessors, identities, and

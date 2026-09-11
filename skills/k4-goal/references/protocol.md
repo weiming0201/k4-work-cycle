@@ -2,9 +2,13 @@
 
 Goal is one immutable terminal-audit contract for one exact Observe Account.
 Its temporary input contains selected Goal-candidate item identities, objective,
-selection rationale, target, baselines, scope, non-goals, sources and cutoff;
+selection rationale, target, baselines, scope, non-goals and cutoff;
 an execution envelope; acceptance points; control contracts; blockers; and
 unknowns.
+
+The Tool derives the source inventory from selected Observe evidence, cutoff
+references, baselines, and source-bound self or independent judges. Empty
+non-goals, controls, blockers, and unknowns may be omitted.
 
 Acceptance points contain observable conditions, window, expected value,
 falsifier, sampling and comparison, required evidence, and bounded judge.

@@ -1,10 +1,10 @@
 {
   "bindings": {},
-  "content_sha256": "52c5cfb945deb775d97a2028c8fa532176a09c4360f17f73f9b65dc5c534c689",
+  "content_sha256": "d5f03a2e8b3d27ec0845d67fbba406ae6b3fb03fea1f6b64f77e83734c9319ba",
   "document": {
     "cue_version": "v0.17.1",
     "extension_id": "k4-work-cycle",
-    "extension_version": "0.7.0",
+    "extension_version": "0.8.0",
     "files": [
       {
         "path": ".gitignore",
@@ -16,19 +16,19 @@
       },
       {
         "path": "DESIGN.md",
-        "sha256": "066461648d11bd4159a78363518c00c1d763cabff0b2ffcf50716b594a9507d6"
+        "sha256": "df19379415de45869db8c24dbf140d54581af60bd3bbe7d1cf731dd05eefc38e"
       },
       {
         "path": "MIGRATION.md",
-        "sha256": "ea35a299c55467e94dc6106a3d042eddcecebd01415bdcc100a75ac6da2c3e0c"
+        "sha256": "ce1620632a0c49bf28fa60f4c8cba9e2d2bc4d2804a9928dcedaebd3d3ffe6c8"
       },
       {
         "path": "README.md",
-        "sha256": "c1ad82344f23aeb6333152c95b8ca1c88dc875b6b3d0a196c46839f1b010a210"
+        "sha256": "79c53470f18e2e3818aba05447c7e0056280e70019a652cd8261b74204a35f45"
       },
       {
         "path": "WORKFLOW.md",
-        "sha256": "305b90d366a773b6195e5159c28916c17668567648653185a10098d6308fd2f1"
+        "sha256": "645da136a99ff386463d18ff7e78d09fe5f70e41c8291c430a133cf8cdc544ed"
       },
       {
         "path": "manifest.cue",
@@ -44,11 +44,11 @@
       },
       {
         "path": "skills/k4-finish/references/protocol.md",
-        "sha256": "24bd9cf319641397bd0ace82596c2bc3aee6cbbea05fa3a981131374fa5d21fa"
+        "sha256": "40cf30ffa8c45295b6e6338d632ec668bfa6f609796555bad8f0954c678827e6"
       },
       {
         "path": "skills/k4-finish/scripts/materialize",
-        "sha256": "f32afd0d83ff639c6224d4df10b845a9ee3bc188e25481abca2f19e0ecafc2fe"
+        "sha256": "7693676ee1bc4df587c949f7672a55bd308662238a3cfcd70f35ac33e1540706"
       },
       {
         "path": "skills/k4-goal/SKILL.md",
@@ -56,15 +56,15 @@
       },
       {
         "path": "skills/k4-goal/assets/protocol.cue",
-        "sha256": "c05349842427a4a90055feacb3ec9db25bddba9d6b8463cf9cf4504cc06b7f23"
+        "sha256": "d86f577bbf577e38600f3b1ee3ec710417e866ba2c0fccbadee7c5042b9f288c"
       },
       {
         "path": "skills/k4-goal/references/protocol.md",
-        "sha256": "51a0a1ac9bd01fda180f3ed0cc8664d4fa8fae7ff04b454a63edc4b3938b47d1"
+        "sha256": "81f95b6f60c3877d1d566412c469933a13a816fe32f61a260042b7ba70805327"
       },
       {
         "path": "skills/k4-goal/scripts/materialize",
-        "sha256": "6700c94990121e1e87470bcbfb66855241bf75000dda8b2b31e7aaea3ece6e4e"
+        "sha256": "cc353df083ec22d87be2047315028f5c169fdcb539164dde65834f1b0cb9d82e"
       },
       {
         "path": "skills/k4-observe/SKILL.md",
@@ -92,11 +92,11 @@
       },
       {
         "path": "skills/k4-plan/references/protocol.md",
-        "sha256": "8a2b4ee24293dce353ddff040526803db0b7dddc537d1d6c475503d303630158"
+        "sha256": "952890ef1da1576de4cceb417deda1c2d4cd664fd3c71671b8ca2cef86888f39"
       },
       {
         "path": "skills/k4-plan/scripts/materialize",
-        "sha256": "2579df374872f790e3fffc3b3272fd59ef08e29303bea7e31109725ad9692a29"
+        "sha256": "ffca0e3f8199097072fb4cb36409c29d0165f886492329ad0373c731ec08680b"
       },
       {
         "path": "skills/k4-run/SKILL.md",
@@ -108,11 +108,11 @@
       },
       {
         "path": "skills/k4-run/references/protocol.md",
-        "sha256": "72fa663440757f42d57d2a20baaf7416534145b605670716be4404c4571b7c05"
+        "sha256": "326d413423fc0fac3fe8f9af5c5289205f4f00a3ffec83cade5a2ffd1826a4cc"
       },
       {
         "path": "skills/k4-run/scripts/append",
-        "sha256": "96cd3f1826e2d27f0ff5d7171e34d359fbcc0c6ca32db919f3e7d3766326bda3"
+        "sha256": "0e6eef9f02e5a43ededc4fcdc0b522679a5b66677fdb1d255d278e5e803bed6a"
       },
       {
         "path": "skills/k4-run/scripts/project",
@@ -124,7 +124,7 @@
       },
       {
         "path": "tests/conformance.py",
-        "sha256": "170ae01fa0d28244bb7f698e91e73b3ad73a69fe10151693d8453e8d0009969b"
+        "sha256": "617cd23d10323fa100bdf0ae536ef48c083e625a2e41e095bae24e9dcc5bb8fc"
       },
       {
         "path": "tests/fixtures/0.4.1/finish.json",
@@ -173,6 +173,10 @@
       {
         "path": "tests/fixtures/0.5.0/run.jsonl",
         "sha256": "ef6634b69cb3125f742bfb4db0f7bf2f6782c23c65b83b4962cc3d605203cf85"
+      },
+      {
+        "path": "tests/input_minimality_oracle.py",
+        "sha256": "32930706a79135fa6a1170078e561d30b38bd097624787217be1276784fbec8a"
       },
       {
         "path": "tools/contracts/0.5.0/k4-finish.cue",
@@ -250,6 +254,6 @@
       }
     ]
   },
-  "generated_unix_ms": 1789094439158,
+  "generated_unix_ms": 1789116277302,
   "schema": "k4-work-cycle-manifest/v2"
 }

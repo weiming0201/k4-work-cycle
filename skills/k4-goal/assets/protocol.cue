@@ -111,16 +111,16 @@ context: _
 	objective:           #Text
 	selection_rationale: #Text
 	target:              #Text
-	source_refs:         #NonEmptyStrings
+	source_refs?:        #NonEmptyStrings
 	evidence_cutoff:     #Cutoff
 	baseline_refs:       #NonEmptyStrings
 	scope:               #NonEmptyStrings
-	non_goals:           #Strings
+	non_goals:           *[] | #Strings
 	execution_envelope:  #ExecutionEnvelope
 	acceptance_points: [...#PointInput]
-	control_contracts: [...#ControlInput]
-	blockers: #Strings
-	unknowns: #Strings
+	control_contracts: *[] | [...#ControlInput]
+	blockers:          *[] | #Strings
+	unknowns:          *[] | #Strings
 })
 #Document: close({
 	observe_item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
@@ -147,15 +147,32 @@ context: _
 	document: #Document
 })
 
-_input:             #Input & context.input
+_rawInput:          context.input
+_input:             #Input & _rawInput
 _observe:           #BoundObserve & context.bindings.observe
 _observeCandidates: _observe.value.document.observation.goal_candidate_ids
+_selectedObserveItems: [for item in _observe.value.document.account.items if list.Contains(_input.observe_item_ids, item.item_id) {item}]
+_selectedEvidence: list.Concat([for item in _selectedObserveItems {item.evidence_refs}])
+_sourceJudges: list.Concat([
+	[for point in _input.acceptance_points if point.judge.kind == "self" || point.judge.kind == "independent-agent" {point.judge.ref}],
+	[for control in _input.control_contracts if control.judge.kind == "self" || control.judge.kind == "independent-agent" {control.judge.ref}],
+])
+_sourceRefsRaw: list.Concat([
+	_selectedEvidence,
+	_input.evidence_cutoff.included_refs,
+	_input.baseline_refs,
+	_sourceJudges,
+])
+_sourceRefs: [for index, ref in _sourceRefsRaw if len([for priorIndex, priorRef in _sourceRefsRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 for id in _input.observe_item_ids {
 	if !list.Contains(_observeCandidates, id) {_invalid: error("observe_item_ids: every selected item must be a current Observe goal candidate")}
 }
 _generateChecks: {
 	_pointIDsUnique:   list.UniqueItems(_pointIDs) & true
 	_controlIDsUnique: list.UniqueItems(_controlIDs) & true
+	if _rawInput.source_refs != _|_ {
+		if _rawInput.source_refs != _sourceRefs {_invalid: error("source_refs: explicit compatibility value must equal the mechanically derived source closure")}
+	}
 	for id in _input.observe_item_ids {
 		if !list.Contains(_observeCandidates, id) {_invalid: error("observe_item_ids: every selected item must be a current Observe goal candidate")}
 	}
@@ -164,8 +181,8 @@ _generateChecks: {
 		[for point in _input.acceptance_points {point.judge}],
 		[for control in _input.control_contracts {control.judge}],
 	]) {
-		if judge.kind == "self" && !list.Contains(_input.source_refs, judge.ref) {_invalid: error("judge.ref: a self judge must be sourceable from Goal source_refs")}
-		if judge.kind == "independent-agent" && !list.Contains(_input.source_refs, judge.ref) {_invalid: error("judge.ref: an independent-agent judge must be sourceable from Goal source_refs")}
+		if judge.kind == "self" && !list.Contains(_sourceRefs, judge.ref) {_invalid: error("judge.ref: a self judge must be sourceable from Goal sources")}
+		if judge.kind == "independent-agent" && !list.Contains(_sourceRefs, judge.ref) {_invalid: error("judge.ref: an independent-agent judge must be sourceable from Goal sources")}
 		if judge.kind == "script" && !list.Contains(_input.execution_envelope.available_tools, judge.ref) {_invalid: error("judge.ref: a script judge must be one of execution_envelope.available_tools")}
 		if judge.kind == "human" && judge.ref != _input.execution_envelope.authorization_ref {_invalid: error("judge.ref: a human judge must equal execution_envelope.authorization_ref")}
 	}
@@ -206,7 +223,7 @@ _document: #Document & {
 	objective:           _input.objective
 	selection_rationale: _input.selection_rationale
 	target:              _input.target
-	source_refs:         _input.source_refs
+	source_refs:         _sourceRefs
 	evidence_cutoff:     _input.evidence_cutoff
 	baseline_refs:       _input.baseline_refs
 	scope:               _input.scope

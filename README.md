@@ -37,6 +37,7 @@ skills/
   k4-run/{SKILL.md,assets/,references/,scripts/}
   k4-finish/{SKILL.md,assets/,references/,scripts/}
 tests/conformance.py
+tests/input_minimality_oracle.py
 tests/fixtures/0.4.1/
 tests/fixtures/0.5.0/
 ```
@@ -50,8 +51,19 @@ Skill-local scripts are the public entrypoints. Observe, Goal, Plan, and Finish
 materialize immutable documents. Run appends one event, projects its ledger,
 and validates either the ledger or its derived projection. Every stable JSON or
 JSONL output is Tool-generated; semantic input remains a temporary work product.
-Observe iteration accepts only changed, added, and retired semantics; its Tool
-derives the complete Account instead of requiring callers to maintain it.
+The minimized Observe-iteration and Finish-settlement interfaces accept changed,
+added, and retired Account semantics without requiring the complete Account.
+Goal sources and empty collections, Plan graph projections, Run fixed/ledger
+fields, and both complete Accounts are Tool-derived rather than caller-maintained.
+
+Finish checks update identities, update-retirement collisions, and item routing
+before projecting the closing Account; a closing item cannot retain
+`goal-candidate`. It generates omitted terminal-control results only when the
+bound Goal has none. Run generates fixed patch metadata, but an emergency patch
+must still supply at least one actual Finding.
+
+Release `0.8.0` minimizes caller input while preserving stable output schemas
+and stage meanings. Former full inputs remain accepted when consistent.
 
 Release `0.7.0` replaces Observe's full-Account temporary input with a
 delta-only interface. The stable Observe schema remains v2; existing Account
