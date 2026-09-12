@@ -17,10 +17,23 @@ if [ "${1:-}" = "--help" ]; then
         '  --bind observe=FILE  exact current Observe Account' \
         '' \
         'Semantic input:' \
+        '  selected_candidate_id: one current Observe goal-candidate item id' \
+        '  supporting_item_ids: optional unique current Observe item ids' \
         '  objective, selection_rationale, target: nonempty strings' \
-        '  observe_item_ids, baseline_refs, scope: nonempty unique string arrays' \
-        '  source_refs are derived from selected Observe evidence, cutoff, baselines,' \
-        '    and source-bound self or independent judges' \
+        '  baseline_refs, scope: nonempty unique string arrays' \
+        '  decision_basis: {expected_benefit, expected_cost, downside, reversibility,' \
+        '    information_value, confidence, basis_refs}' \
+        '  decision_basis.confidence: number from 0 through 1' \
+        '  change_surface: {primary_facet, direct_change, open_boundaries,' \
+        '    bounded_boundaries, frozen_boundaries, derivative_effects}' \
+        '  boundary_feasibility: {checks, conclusion, unknowns}' \
+        '  boundary_feasibility.checks must cover exactly once: subject-boundary,' \
+        '    account-sufficiency, change-surface, execution-envelope,' \
+        '    downside-control, terminal-observability, failure-stop' \
+        '  each feasibility check: {criterion, result, statement, evidence_refs, unknowns}' \
+        '    where result is pass | fail' \
+        '  source_refs and observe_item_ids are derived from selected and supporting' \
+        '    Observe items, cutoff, baselines, decision basis, feasibility, and judges' \
         '  non_goals: optional unique string array; omission means empty' \
         '  evidence_cutoff: {at: nonempty string, included_refs: nonempty unique string array}' \
         '  execution_envelope: {authorization_ref, authorization_scope,' \
@@ -44,7 +57,8 @@ if [ "${1:-}" = "--help" ]; then
         '  judge.ref must be sourceable according to kind: Goal source, available tool,' \
         '    or authorization_ref for human' \
         '  blockers, unknowns: optional unique string arrays; omission means empty' \
-        '  nonempty blockers produce not-frozen; otherwise status is frozen.' \
+        '  blockers or any failed feasibility check produce not-frozen;' \
+        '    otherwise status is frozen.' \
         '  Unknowns are retained annotations; frozen requires at least one acceptance point.' \
         '' \
         'Output:' \

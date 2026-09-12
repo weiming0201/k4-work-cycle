@@ -27,16 +27,6 @@ context: _
 	phase:        "normal" | "abort"
 	depends_on: [...#OperationID]
 	controlled_by: [...#ControlID]
-	local_judgment: {
-		subject_ref:                #Text
-		baseline_refs:              #NonEmptyStrings
-		actual_output_requirements: #NonEmptyStrings
-		required_evidence:          #NonEmptyStrings
-		pass_criteria:              #NonEmptyStrings
-		fail_criteria:              #NonEmptyStrings
-		check_ref:                  #Text
-		judge: {kind: #Text, ref: #Text, claim_limit: #Text}
-	}
 	on_result: close({
 		pass: close({next_operation_ids: [...#OperationID], reason: #Text})
 		fail: close({next_operation_ids: [...#OperationID], reason: #Text})
@@ -49,7 +39,7 @@ context: _
 	...
 }
 #GoalEnvelope: {
-	schema:            "k4-goal-document/v7"
+	schema:            "k4-goal-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -69,7 +59,7 @@ context: _
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v8"
+	schema:            "k4-plan-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding}
@@ -91,7 +81,7 @@ context: _
 }
 #BoundGoal: close({binding: #Binding, value: #GoalEnvelope})
 #BoundPlan: close({binding: #Binding, value: #PlanEnvelope})
-#ControlObservation: close({
+#InvariantCheck: close({
 	control_id:      #ControlID
 	result:          #ActualResult
 	actual_refs:     #Strings
@@ -107,27 +97,15 @@ context: _
 	statement:  #Text
 	basis_refs: #NonEmptyStrings
 })
-#OperationInput: close({
+#OperationEvent: close({
 	kind:               "operation-result"
 	operation_id:       #OperationID
-	local_result:       #ActualResult
+	result:             #ActualResult
+	eligibility_refs:   #NonEmptyStrings
 	actual_output_refs: #Strings
 	evidence_refs:      #Strings
 	trace_refs:         #NonEmptyStrings
-	control_observations: [...#ControlObservation]
-	findings: [...#Finding]
-	unknowns: [...#Unknown]
-})
-#OperationEvent: close({
-	kind:                    "operation-result"
-	operation_id:            #OperationID
-	local_result:            #ActualResult
-	eligibility_refs:        #NonEmptyStrings
-	local_judgment_contract: #PlanOperation.local_judgment
-	actual_output_refs:      #Strings
-	evidence_refs:           #Strings
-	trace_refs:              #NonEmptyStrings
-	control_observations: [...#ControlObservation]
+	invariant_checks: [...#InvariantCheck]
 	findings: [...#Finding]
 	unknowns: [...#Unknown]
 })
@@ -145,7 +123,6 @@ context: _
 	resource_refs:           #NonEmptyStrings
 	maximum_side_effects:    #NonEmptyStrings
 	actual_side_effect_refs: #NonEmptyStrings
-	evidence_refs:           #NonEmptyStrings
 	trace_refs:              #NonEmptyStrings
 	findings: [#Finding, ...#Finding]
 	unknowns: [...#Unknown]
@@ -167,10 +144,9 @@ context: _
 	evidence_refs:             #NonEmptyStrings
 	resume_ref:                null | #Text
 })
-#EventInput: #OperationInput | #PatchEvent | #AbortConfirmedEvent | #HaltEvent
-#Event:      #OperationEvent | #PatchEvent | #AbortConfirmedEvent | #HaltEvent
+#Event: #OperationEvent | #PatchEvent | #AbortConfirmedEvent | #HaltEvent
 #EventEnvelope: close({
-	schema:                "k4-run-event/v7"
+	schema:                "k4-run-event/v6"
 	sequence:              uint
 	recorded_unix_ms:      uint
 	previous_event_sha256: null | #Digest
@@ -237,13 +213,13 @@ _abortConfirmedEvents: [for envelope in _events if envelope.event.kind == "abort
 _haltEvents: [for envelope in _events if envelope.event.kind == "halt" {envelope}]
 
 _operationByID: {for operation in _plan.value.document.operations {(operation.operation_id): operation}}
-_passRoutes: [for envelope in _operationEvents if envelope.event.local_result == "pass" if list.Contains(_operationIDs, envelope.event.operation_id) {close({
+_passRoutes: [for envelope in _operationEvents if envelope.event.result == "pass" if list.Contains(_operationIDs, envelope.event.operation_id) {close({
 	operation_id:       envelope.event.operation_id
 	sequence:           envelope.sequence
 	next_operation_ids: _operationByID[envelope.event.operation_id].on_result.pass.next_operation_ids
 })
 }]
-_failRoutes: [for envelope in _operationEvents if envelope.event.local_result == "fail" if list.Contains(_operationIDs, envelope.event.operation_id) {close({
+_failRoutes: [for envelope in _operationEvents if envelope.event.result == "fail" if list.Contains(_operationIDs, envelope.event.operation_id) {close({
 	operation_id:       envelope.event.operation_id
 	sequence:           envelope.sequence
 	next_operation_ids: _operationByID[envelope.event.operation_id].on_result.fail.next_operation_ids
@@ -283,19 +259,19 @@ _publicLedgerChecks: {
 			if len([for abortEvent in _abortConfirmedEvents if abortEvent.sequence < envelope.sequence {abortEvent}]) != 1 {_invalid: error("abort response operation requires a prior abort-confirmed event")}
 			if _plan.value.document.on_abort.entry_operation_id != envelope.event.operation_id && len([for route in _routedResponses if route.sequence < envelope.sequence if _operationByID[route.operation_id].phase == "abort" if list.Contains(route.next_operation_ids, envelope.event.operation_id) {route}]) == 0 {_invalid: error("abort response operation was not activated by the frozen on_abort route")}
 		}
-		if envelope.event.local_result == "pass" && len(envelope.event.actual_output_refs) == 0 {_invalid: error("passing Run operation requires actual output")}
+		if envelope.event.result == "pass" && len(envelope.event.actual_output_refs) == 0 {_invalid: error("passing Run operation requires actual output")}
 		if len(envelope.event.evidence_refs) == 0 {_invalid: error("Run operation result requires evidence")}
 		if list.Contains(_operationIDs, envelope.event.operation_id) {
 			for dependency in _operationByID[envelope.event.operation_id].depends_on {
 				if len([for prior in _events if prior.sequence < envelope.sequence if prior.event.kind == "operation-result" if prior.event.operation_id == dependency {prior}]) != 1 {_invalid: error("operation dependency must already have exactly one response in the Run ledger")}
 			}
-			_actualInvariantIDsUnique: list.UniqueItems([for check in envelope.event.control_observations {check.control_id}]) & true
-			if list.SortStrings([for controlID in _operationByID[envelope.event.operation_id].controlled_by if _controlTiming[controlID] == "invariant" {controlID}]) != list.SortStrings([for check in envelope.event.control_observations {check.control_id}]) {_invalid: error("Run control observations must exactly cover the operation's invariant controls")}
-			for check in envelope.event.control_observations {
+			_actualInvariantIDsUnique: list.UniqueItems([for check in envelope.event.invariant_checks {check.control_id}]) & true
+			if list.SortStrings([for controlID in _operationByID[envelope.event.operation_id].controlled_by if _controlTiming[controlID] == "invariant" {controlID}]) != list.SortStrings([for check in envelope.event.invariant_checks {check.control_id}]) {_invalid: error("Run invariant checks must exactly cover the operation's invariant controls")}
+			for check in envelope.event.invariant_checks {
 				if check.result == "pass" && (len(check.actual_refs) == 0 || len(check.comparison_refs) == 0) {_invalid: error("passing invariant check requires actual and comparison references")}
 				if len(check.evidence_refs) == 0 {_invalid: error("invariant result requires evidence")}
 			}
-			if envelope.event.local_result == "pass" && len([for check in envelope.event.control_observations if check.result == "fail" {check}]) > 0 {_invalid: error("operation cannot pass with a failed invariant control observation")}
+			if envelope.event.result == "pass" && len([for check in envelope.event.invariant_checks if check.result == "fail" {check}]) > 0 {_invalid: error("operation cannot pass with a failed invariant check")}
 		}
 	}
 	for envelope in _patchEvents {
@@ -351,19 +327,19 @@ _publicCandidateChecks: {
 			if len(_abortConfirmedEvents) != 1 {_invalid: error("abort response operation requires one prior abort-confirmed event")}
 			if !list.Contains(_activatedAbortOperationIDs, _input.operation_id) {_invalid: error("abort response operation is not activated by the frozen on_abort route")}
 		}
-		if _input.local_result == "pass" && len(_input.actual_output_refs) == 0 {_invalid: error("passing Run operation requires actual output")}
+		if _input.result == "pass" && len(_input.actual_output_refs) == 0 {_invalid: error("passing Run operation requires actual output")}
 		if len(_input.evidence_refs) == 0 {_invalid: error("Run operation result requires evidence")}
 		if list.Contains(_operationIDs, _input.operation_id) {
 			for dependency in _operationByID[_input.operation_id].depends_on {
 				if len([for prior in _operationEvents if prior.event.operation_id == dependency {prior}]) != 1 {_invalid: error("operation dependency must already have exactly one response in the Run journal")}
 			}
-			_actualInvariantIDsUnique: list.UniqueItems([for check in _input.control_observations {check.control_id}]) & true
-			if list.SortStrings([for controlID in _operationByID[_input.operation_id].controlled_by if _controlTiming[controlID] == "invariant" {controlID}]) != list.SortStrings([for check in _input.control_observations {check.control_id}]) {_invalid: error("Run control observations must exactly cover the operation's invariant controls")}
-			for check in _input.control_observations {
+			_actualInvariantIDsUnique: list.UniqueItems([for check in _input.invariant_checks {check.control_id}]) & true
+			if list.SortStrings([for controlID in _operationByID[_input.operation_id].controlled_by if _controlTiming[controlID] == "invariant" {controlID}]) != list.SortStrings([for check in _input.invariant_checks {check.control_id}]) {_invalid: error("Run invariant checks must exactly cover the operation's invariant controls")}
+			for check in _input.invariant_checks {
 				if check.result == "pass" && (len(check.actual_refs) == 0 || len(check.comparison_refs) == 0) {_invalid: error("passing invariant check requires actual and comparison references")}
 				if len(check.evidence_refs) == 0 {_invalid: error("invariant result requires evidence")}
 			}
-			if _input.local_result == "pass" && len([for check in _input.control_observations if check.result == "fail" {check}]) > 0 {_invalid: error("operation cannot pass with a failed invariant control observation")}
+			if _input.result == "pass" && len([for check in _input.invariant_checks if check.result == "fail" {check}]) > 0 {_invalid: error("operation cannot pass with a failed invariant check")}
 		}
 	}
 	if _input.kind == "emergency-patch" {
@@ -406,21 +382,20 @@ _publicCandidateChecks: {
 	}
 }
 
-_input:          #EventInput & context.input
+_input:          #Event & context.input
 _generatedEvent: #Event
 if _input.kind == "operation-result" {
 	_generatedEvent: close({
-		kind:         _input.kind
-		operation_id: _input.operation_id
-		local_result: _input.local_result
-		eligibility_refs: ["plan-content:\(_plan.binding.content_sha256)#operation:\(_input.operation_id)", "run-prefix-events:\(len(_events))#activated"]
-		local_judgment_contract: _operationByID[_input.operation_id].local_judgment
-		actual_output_refs:      _input.actual_output_refs
-		evidence_refs:           _input.evidence_refs
-		trace_refs:              _input.trace_refs
-		control_observations:    _input.control_observations
-		findings:                _input.findings
-		unknowns:                _input.unknowns
+		kind:               _input.kind
+		operation_id:       _input.operation_id
+		result:             _input.result
+		eligibility_refs:   _input.eligibility_refs
+		actual_output_refs: _input.actual_output_refs
+		evidence_refs:      _input.evidence_refs
+		trace_refs:         _input.trace_refs
+		invariant_checks:   _input.invariant_checks
+		findings:           _input.findings
+		unknowns:           _input.unknowns
 	})
 }
 if _input.kind == "emergency-patch" {
@@ -438,7 +413,6 @@ if _input.kind == "emergency-patch" {
 		resource_refs:           _input.resource_refs
 		maximum_side_effects:    _input.maximum_side_effects
 		actual_side_effect_refs: _input.actual_side_effect_refs
-		evidence_refs:           _input.evidence_refs
 		trace_refs:              _input.trace_refs
 		findings:                _input.findings
 		unknowns:                _input.unknowns
@@ -467,7 +441,7 @@ if _input.kind == "halt" {
 }
 
 next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
-	schema:   "k4-run-event/v7"
+	schema:   "k4-run-event/v6"
 	bindings: _bindings
 	event:    _generatedEvent
 })
@@ -475,7 +449,7 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 #ProjectedOperation: close({
 	operation_id:       #OperationID
 	phase:              "normal" | "abort"
-	local_result:       #ProjectedResult
+	result:             #ProjectedResult
 	event_sequence:     null | uint
 	eligibility_refs:   #Strings
 	actual_output_refs: #Strings
@@ -491,7 +465,7 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 	reason:             #Text
 	evidence_refs:      #NonEmptyStrings
 })
-#ProjectedControlObservation: close({
+#ControlObservation: close({
 	event_sequence:  uint
 	operation_id:    #OperationID
 	result:          #ActualResult
@@ -503,7 +477,7 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 #InvariantResult: close({
 	control_id: #ControlID
 	result:     #ActualResult
-	observations: [#ProjectedControlObservation, ...#ProjectedControlObservation]
+	observations: [#ControlObservation, ...#ControlObservation]
 })
 #ProjectedPatch: close({
 	event_sequence:          uint
@@ -529,7 +503,7 @@ _operationProjection: [for operation in _plan.value.document.operations {
 		close({
 			operation_id:   operation.operation_id
 			phase:          operation.phase
-			local_result:   "not-run"
+			result:         "not-run"
 			event_sequence: null
 			eligibility_refs: []
 			actual_output_refs: []
@@ -543,7 +517,7 @@ _operationProjection: [for operation in _plan.value.document.operations {
 		close({
 			operation_id:       operation.operation_id
 			phase:              operation.phase
-			local_result:       _matches[0].event.local_result
+			result:             _matches[0].event.result
 			event_sequence:     _matches[0].sequence
 			eligibility_refs:   _matches[0].event.eligibility_refs
 			actual_output_refs: _matches[0].event.actual_output_refs
@@ -554,7 +528,7 @@ _operationProjection: [for operation in _plan.value.document.operations {
 		})
 	}
 }]
-_actualOperationResults: [for operation in _operationProjection if operation.local_result != "not-run" {operation}]
+_actualOperationResults: [for operation in _operationProjection if operation.result != "not-run" {operation}]
 _patchProjection: [for envelope in _patchEvents {close({
 	event_sequence:          envelope.sequence
 	operation_id:            envelope.event.operation_id
@@ -576,7 +550,7 @@ _patchProjection: [for envelope in _patchEvents {close({
 _invariantObservations: [for control in _goal.value.document.control_contracts if control.check_timing == "invariant" {
 	control_id: control.control_id
 	observations: list.Concat([for envelope in _operationEvents {
-		[for check in envelope.event.control_observations if check.control_id == control.control_id {
+		[for check in envelope.event.invariant_checks if check.control_id == control.control_id {
 			close({
 				event_sequence:  envelope.sequence
 				operation_id:    envelope.event.operation_id
@@ -599,9 +573,15 @@ _invariantResults: [for control in _invariantObservations if len(control.observa
 		observations: control.observations
 	})
 }]
-_topologyStatus: "open" | "plan-complete" | "abort"
-if len(_haltEvents) == 0 {_topologyStatus: "open"}
-if len(_haltEvents) == 1 {_topologyStatus: _haltEvents[0].event.trigger}
+_operationStates: [for result in _operationProjection {result.result}]
+_operationFailures: [for state in _operationStates if state == "fail" {state}]
+_executionResult: null | "pass" | "fail"
+if len(_haltEvents) == 0 {_executionResult: null}
+if len(_haltEvents) == 1 {
+	if _haltEvents[0].event.trigger == "abort" {_executionResult: "fail"}
+	if _haltEvents[0].event.trigger == "plan-complete" && len(_operationFailures) == 0 {_executionResult: "pass"}
+	if _haltEvents[0].event.trigger == "plan-complete" && len(_operationFailures) > 0 {_executionResult: "fail"}
+}
 
 _abortConfirmation: null | #ProjectedAbortConfirmation
 if len(_abortConfirmedEvents) == 0 {_abortConfirmation: null}
@@ -641,7 +621,7 @@ if len(_events) > 0 {
 }
 
 project: _planChecks & _publicLedgerChecks & close({
-	schema:   "k4-run-projection/v7"
+	schema:   "k4-run-projection/v6"
 	bindings: _bindings
 	document: close({
 		operations:                _operationProjection
@@ -649,7 +629,7 @@ project: _planChecks & _publicLedgerChecks & close({
 		emergency_patches:         _patchProjection
 		abort_confirmation:        _abortConfirmation
 		invariant_control_results: _invariantResults
-		topology_status:           _topologyStatus
+		execution_result:          _executionResult
 		halted:                    _halted
 		halt:                      _halt
 		event_count:               len(_events)
@@ -659,7 +639,7 @@ project: _planChecks & _publicLedgerChecks & close({
 })
 
 _existingProjection: context.existing & {
-	schema:            "k4-run-projection/v7"
+	schema:            "k4-run-projection/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings:          _bindings

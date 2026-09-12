@@ -26,23 +26,27 @@ Options:
   --bind plan=FILE              exact executable Plan
 
 Semantic input:
-  cutoff and delta
+  cutoff and delta: {summary}
   updates[]: {previous_item_id, reason, item}; omission means empty
   additions[]: {reason, item}; omission means empty
   retirements[]: {previous_item_id, reason, evidence_refs}; omission means empty
   item: {lens, epistemic_kind, state, statement, evidence_refs, route, route_ref?}
   route_ref is required only when route is external and must otherwise be absent or null.
   goal-candidate is not valid in a closing Finish Account.
-  acceptance_results[]: {id, result, actual_refs, comparison_refs, evidence_refs, unknowns?}
+  acceptance_results[]: {id, result, actual_refs, evidence_refs, unknowns?}
   terminal_control_results[]: same fields, one per terminal control; omission is
     generated as [] only when the bound Goal has no terminal controls
   each judgment result: pass | fail; unknowns are annotations, not result states
   result_disposition: {state, statement, refs}
   incomplete_deliverable: required only for fail
+  closure_actions[]: {action_key, kind, authorized_by, result, actual_refs,
+    evidence_refs, actual_effect_refs, findings, unknowns}; omission means empty
+  attributions[]: {stage, statement, evidence_refs, claim_limit}; omission means empty
+  residual_effects[]: {statement, state, refs, responsible_ref}; omission means empty
 
 The Tool carries unmentioned predecessors forward, derives Account continuity,
-sources, lenses, ids, and exact Goal judge refs, and supplies canonical null or
-empty fields. Former full inputs remain accepted when consistent.
+separate Account and closure sources, lenses, ids, delta evidence, and exact
+Goal judge/comparison contracts, and supplies canonical null or empty fields.
 
 Output:
   The stable Finish envelope binds the exact Run ledger and stores the next
@@ -121,7 +125,8 @@ def preflight(value: Any, previous: dict, goal: dict) -> list[str]:
     if "terminal_control_results" not in value and terminal_controls:
         add_error(errors, "input.terminal_control_results: required because the bound Goal has terminal controls")
 
-    if "items" in value:
+    if "items" in value or "source_refs" in value:
+        add_error(errors, "input: use semantic delta fields; full formatted Account input is not accepted by v5")
         return errors
 
     collections: dict[str, list[Any]] = {}
@@ -185,105 +190,60 @@ def semantic_item(item: dict) -> dict:
     return result
 
 
-def normalize(value: object, previous: dict, goal: dict, events: list[dict]) -> dict:
+def normalize(value: object, previous: dict, goal: dict) -> dict:
     if not isinstance(value, dict):
         raise ValueError("input: expected one JSON object")
-    if "items" not in value:
-        updates = value.pop("updates", [])
-        additions = value.pop("additions", [])
-        retirements = value.pop("retirements", [])
-        update_by_id = {entry["previous_item_id"]: entry for entry in updates}
-        retired_ids = {entry["previous_item_id"] for entry in retirements}
-        items: list[dict] = []
-        for prior in previous["items"]:
-            if prior["item_id"] in retired_ids:
-                continue
-            update = update_by_id.get(prior["item_id"])
-            if update is None:
-                retained = semantic_item(prior)
-                retained.update({
-                    "change": "retained",
-                    "previous_item_id": prior["item_id"],
-                    "change_reason": "Unmentioned by the closing semantic delta; prior item retained.",
-                })
-                items.append(retained)
-            else:
-                changed = semantic_item(update["item"])
-                changed.update({
-                    "change": "changed",
-                    "previous_item_id": prior["item_id"],
-                    "change_reason": update["reason"],
-                })
-                items.append(changed)
-        for addition in additions:
-            added = semantic_item(addition["item"])
-            added.update({"change": "added", "previous_item_id": None, "change_reason": addition["reason"]})
-            items.append(added)
-        value["items"] = items
-        value["retired"] = retirements
+    updates = value.pop("updates", [])
+    additions = value.pop("additions", [])
+    retirements = value.pop("retirements", [])
+    update_by_id = {entry["previous_item_id"]: entry for entry in updates}
+    retired_ids = {entry["previous_item_id"] for entry in retirements}
+    items: list[dict] = []
+    for prior in previous["items"]:
+        if prior["item_id"] in retired_ids:
+            continue
+        update = update_by_id.get(prior["item_id"])
+        if update is None:
+            retained = semantic_item(prior)
+            retained.update({
+                "change": "retained",
+                "previous_item_id": prior["item_id"],
+                "change_reason": "Unmentioned by the closing semantic delta; prior item retained.",
+            })
+            items.append(retained)
+        else:
+            changed = semantic_item(update["item"])
+            changed.update({
+                "change": "changed",
+                "previous_item_id": prior["item_id"],
+                "change_reason": update["reason"],
+            })
+            items.append(changed)
+    for addition in additions:
+        added = semantic_item(addition["item"])
+        added.update({"change": "added", "previous_item_id": None, "change_reason": addition["reason"]})
+        items.append(added)
+    value["items"] = items
+    value["retired"] = retirements
 
-    value.setdefault("subject", previous["subject"])
-    value.setdefault("boundary", previous["boundary"])
-    value.setdefault("lenses", previous["lenses"])
     for item in value["items"]:
         item["route_ref"] = item.get("route_ref") if item.get("route") == "external" else None
 
-    point_judges = {entry["point_id"]: entry["judge"]["ref"] for entry in goal["acceptance_points"]}
-    control_judges = {
-        entry["control_id"]: entry["judge"]["ref"]
+    terminal_controls = {
+        entry["control_id"]: entry
         for entry in goal["control_contracts"]
         if entry["check_timing"] == "terminal"
     }
-    if not control_judges:
+    if not terminal_controls:
         value.setdefault("terminal_control_results", [])
     for result in value.get("acceptance_results", []):
-        result.setdefault("judge_ref", point_judges.get(result.get("id")))
         result.setdefault("unknowns", [])
     for result in value.get("terminal_control_results", []):
-        result.setdefault("judge_ref", control_judges.get(result.get("id")))
         result.setdefault("unknowns", [])
     value.setdefault("incomplete_deliverable", None)
-
-    if "source_refs" not in value:
-        item_refs = [ref for item in value["items"] for ref in item["evidence_refs"]]
-        retired_refs = [ref for item in value["retired"] for ref in item["evidence_refs"]]
-        acceptance_refs = [ref for result in value.get("acceptance_results", []) for ref in result["evidence_refs"]]
-        terminal_refs = [ref for result in value.get("terminal_control_results", []) for ref in result["evidence_refs"]]
-        acceptance_unknown_refs = [
-            ref for result in value.get("acceptance_results", []) for unknown in result["unknowns"] for ref in unknown["basis_refs"]
-        ]
-        terminal_unknown_refs = [
-            ref for result in value.get("terminal_control_results", []) for unknown in result["unknowns"] for ref in unknown["basis_refs"]
-        ]
-        operation_finding_refs: list[str] = []
-        operation_unknown_refs: list[str] = []
-        patch_finding_refs: list[str] = []
-        patch_unknown_refs: list[str] = []
-        abort_refs: list[str] = []
-        for envelope in events:
-            event = envelope.get("event", {})
-            if event.get("kind") == "operation-result":
-                operation_finding_refs.extend(ref for finding in event.get("findings", []) for ref in finding["evidence_refs"])
-                operation_unknown_refs.extend(ref for unknown in event.get("unknowns", []) for ref in unknown["basis_refs"])
-            elif event.get("kind") == "emergency-patch":
-                patch_finding_refs.extend(ref for finding in event.get("findings", []) for ref in finding["evidence_refs"])
-                patch_unknown_refs.extend(ref for unknown in event.get("unknowns", []) for ref in unknown["basis_refs"])
-            elif event.get("kind") == "abort-confirmed":
-                abort_refs.extend(event.get("evidence_refs", []))
-            elif event.get("kind") == "halt" and event.get("trigger") == "abort":
-                abort_refs.extend(event.get("evidence_refs", []))
-                abort_refs.extend(event.get("budget_evidence_refs", []))
-                abort_refs.extend(event.get("side_effect_evidence_refs", []))
-        all_evidence = set(
-            item_refs + retired_refs + acceptance_refs + terminal_refs + acceptance_unknown_refs + terminal_unknown_refs
-            + operation_finding_refs + operation_unknown_refs + patch_finding_refs + patch_unknown_refs + abort_refs
-        )
-        ordered = (
-            previous["source_refs"] + value["delta"]["evidence_refs"] + item_refs + retired_refs
-            + acceptance_refs + terminal_refs + operation_finding_refs + operation_unknown_refs
-            + patch_finding_refs + patch_unknown_refs + acceptance_unknown_refs + terminal_unknown_refs + abort_refs
-        )
-        value["source_refs"] = unique([ref for ref in ordered if ref in all_evidence])
+    value.setdefault("closure_actions", [])
+    value.setdefault("attributions", [])
+    value.setdefault("residual_effects", [])
     return value
 
 
@@ -336,13 +296,12 @@ def main() -> int:
         bound = bindings(arguments)
         previous = json.loads(Path(bound["previous_account"]).read_text())["document"]["account"]
         goal = json.loads(Path(bound["goal"]).read_text())["document"]
-        events = [json.loads(line) for line in Path(run_log).read_text().splitlines() if line.strip()]
         raw = json.loads(Path(source_name).read_text())
         errors = preflight(raw, previous, goal)
         if errors:
             print(json.dumps({"ok": False, "error": "semantic input rejected", "errors": errors}, ensure_ascii=False, sort_keys=True), file=sys.stderr)
             return 1
-        normalized = normalize(raw, previous, goal, events)
+        normalized = normalize(raw, previous, goal)
     except (KeyError, OSError, json.JSONDecodeError, ValueError) as error:
         print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
         return 1

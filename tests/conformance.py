@@ -52,7 +52,7 @@ def manifest_input(root: Path) -> dict[str, Any]:
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.8.0",
+        "extension_version": "0.9.0",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",
@@ -214,7 +214,8 @@ class Harness:
             "subject": "isolated repository",
             "boundary": "only the isolated repository fixture",
             "cutoff": "fixture baseline",
-            "delta": {"summary": "initial source inspection", "evidence_refs": ["asset://repo"]},
+            "delta": {"summary": "initial source inspection"},
+            "completeness": {"estimate": 1, "claim_limit": "fixture boundary", "remaining_angles": []},
             "additions": [
                 {
                     "reason": "initial observation",
@@ -251,6 +252,7 @@ class Harness:
         invalid_observe_input = {
             "cutoff": "",
             "delta": {"summary": "", "evidence_refs": []},
+            "completeness": {"estimate": 2, "claim_limit": "fixture", "remaining_angles": []},
             "source_refs": ["caller-must-not-maintain-this"],
             "updates": [
                 {
@@ -303,6 +305,7 @@ class Harness:
             "input.cutoff",
             "input.delta.summary",
             "input.delta.evidence_refs",
+            "input.completeness.estimate",
             "input.updates[0].previous_item_id",
             "input.updates[0].reason",
             "input.updates[0].item.route_ref",
@@ -317,7 +320,8 @@ class Harness:
         retirement_observe = self.work / "observe-retirement.json"
         retirement_input = {
             "cutoff": "fixture retirement observation",
-            "delta": {"summary": "the structure item left the current Account", "evidence_refs": ["asset://repo"]},
+            "delta": {"summary": "the structure item left the current Account"},
+            "completeness": {"estimate": 1, "claim_limit": "fixture boundary", "remaining_angles": []},
             "retirements": [
                 {
                     "previous_item_id": structure_id,
@@ -337,11 +341,36 @@ class Harness:
 
         goal = self.work / "goal.json"
         goal_input = {
-            "observe_item_ids": [gap_id],
+            "selected_candidate_id": gap_id,
+            "supporting_item_ids": [],
             "objective": "produce and verify the expected fixture result",
             "selection_rationale": "this bounded Goal directly addresses the selected gap with available evidence and tools",
             "target": "isolated repository fixture",
-            "source_refs": ["asset://repo"],
+            "decision_basis": {
+                "expected_benefit": "produce the missing fixture result",
+                "expected_cost": "one bounded attempt",
+                "downside": "the fixture attempt may fail",
+                "reversibility": "all effects remain in the disposable fixture",
+                "information_value": "the run demonstrates the protocol",
+                "confidence": 0.8,
+                "basis_refs": ["asset://repo"],
+            },
+            "change_surface": {
+                "primary_facet": "fixture delivery",
+                "direct_change": "create the expected result",
+                "open_boundaries": ["fixture output"],
+                "bounded_boundaries": ["fixture tests"],
+                "frozen_boundaries": ["external systems"],
+                "derivative_effects": ["local evidence"],
+            },
+            "boundary_feasibility": {
+                "checks": [
+                    {"criterion": criterion, "result": "pass", "statement": "bounded by the fixture", "evidence_refs": ["asset://repo"], "unknowns": []}
+                    for criterion in ("subject-boundary", "account-sufficiency", "change-surface", "execution-envelope", "downside-control", "terminal-observability", "failure-stop")
+                ],
+                "conclusion": "the Goal is bounded enough to plan",
+                "unknowns": [],
+            },
             "evidence_cutoff": {"at": "before execution", "included_refs": ["asset://repo"]},
             "baseline_refs": ["asset://repo"],
             "scope": ["fixture result only"],
@@ -434,9 +463,7 @@ class Harness:
 
         def operation(key: str, deps: list[int], targets_pass: list[int], targets_fail: list[int], satisfies: list[str]) -> dict[str, Any]:
             return {
-                "phase": "normal",
                 "operation_key": key,
-                "depends_on_indices": deps,
                 "satisfies": satisfies,
                 "controlled_by": [invariant_id, terminal_id],
                 "tool_ref": "tool://fixture",
@@ -446,11 +473,20 @@ class Harness:
                 "permission_refs": ["authorization://fixture"],
                 "resource_refs": ["resource://local"],
                 "maximum_side_effects": ["fixture files"],
-                "pre_checks": ["operation is activated"],
-                "post_checks": ["declared result is observable"],
+                "preconditions": [{"statement": "operation is activated", "check_ref": "tool://fixture", "expected_state": "activated"}],
+                "local_judgment": {
+                    "subject_ref": f"artifact://{key}",
+                    "baseline_refs": ["asset://repo"],
+                    "actual_output_requirements": ["declared result is observable"],
+                    "required_evidence": ["operation evidence"],
+                    "pass_criteria": ["declared output exists"],
+                    "fail_criteria": ["declared output is absent"],
+                    "check_ref": "tool://fixture",
+                    "judge": {"kind": "script", "ref": "tool://fixture", "claim_limit": "one operation output"},
+                },
                 "idempotency": "fresh fixture output",
                 "retry_limit": 0,
-                "recovery": "follow the frozen fail edge",
+                "failure_handling": {"mode": "restore", "target_ref": f"artifact://{key}", "action_ref": "tool://fixture", "check_ref": "tool://fixture", "reason": "restore the fixture baseline"},
                 "on_result": {
                     "pass": {"next_operation_indices": targets_pass, "reason": "pass route"},
                     "fail": {"next_operation_indices": targets_fail, "reason": "fail route"},
@@ -462,10 +498,8 @@ class Harness:
             "difference": "the accepted fixture result is absent",
             "selection_rationale": "the fork-join route exercises independent work while preserving one bounded settlement",
             "route": {"claim": "fork two checks and join their responses", "supporting_refs": ["asset://repo"], "counter_refs": []},
-            "entry_operation_indices": [0],
             "on_abort": {
                 "mode": "preserve-only",
-                "entry_operation_index": None,
                 "reason": "preserve the sourced abort state without inventing recovery work",
             },
             "operations": [
@@ -506,7 +540,7 @@ class Harness:
             )
 
         independent_goal_input = json.loads(json.dumps(goal_input))
-        independent_goal_input["source_refs"].append("agent://fixture")
+        independent_goal_input["decision_basis"]["basis_refs"].append("agent://fixture")
         independent_goal_input["evidence_cutoff"]["included_refs"].append("agent://fixture")
         independent_goal_input["acceptance_points"][0]["judge"] = {
             "kind": "independent-agent",
@@ -550,12 +584,11 @@ class Harness:
             return {
                 "kind": "operation-result",
                 "operation_id": operations[index],
-                "result": result,
-                "eligibility_refs": ["eligibility://plan"],
+                "local_result": result,
                 "actual_output_refs": [f"actual://{index}"] if result == "pass" else [],
                 "evidence_refs": [f"evidence://operation-{index}"],
                 "trace_refs": [f"trace://operation-{index}"],
-                "invariant_checks": [invariant()],
+                "control_observations": [invariant()],
                 "findings": ([{"statement": "branch failure remains relevant", "evidence_refs": ["evidence://op-finding"]}] if finding else []),
                 "unknowns": ([{"statement": "branch cause remains unknown", "basis_refs": ["basis://op-unknown"]}] if unknown else []),
             }
@@ -576,6 +609,7 @@ class Harness:
             "resource_refs": ["resource://local"],
             "maximum_side_effects": ["one fixture adapter"],
             "actual_side_effect_refs": ["actual://adapter"],
+            "evidence_refs": ["evidence://patch-application"],
             "trace_refs": ["trace://patch"],
             "findings": [{"statement": "the Plan omitted a required adapter", "evidence_refs": ["evidence://patch-finding"]}],
             "unknowns": [{"statement": "adapter portability is unknown", "basis_refs": ["basis://patch-unknown"]}],
@@ -655,61 +689,32 @@ class Harness:
             f"plan={plan}",
         )
         projected = read_json(projection)["document"]
-        if projected["execution_result"] != "fail" or [item["result"] for item in projected["operations"]] != ["pass", "pass", "fail", "pass"]:
+        if projected["topology_status"] != "plan-complete" or [item["local_result"] for item in projected["operations"]] != ["pass", "pass", "fail", "pass"]:
             raise AssertionError("Run projection did not preserve binary operation results")
 
         finish = self.work / "finish.json"
-        finish_sources = [
-            "asset://repo",
-            "run://ledger",
-            "accept://result",
-            "terminal://control",
-            "evidence://op-finding",
-            "basis://op-unknown",
-            "evidence://patch-finding",
-            "basis://patch-unknown",
-        ]
         finish_input = {
-            "subject": observe["account"]["subject"],
-            "boundary": observe["account"]["boundary"],
             "cutoff": "after Run halt",
-            "source_refs": finish_sources,
-            "lenses": observe["account"]["lenses"],
-            "delta": {"summary": "the bounded attempt was settled", "evidence_refs": ["run://ledger"]},
-            "items": [
+            "delta": {"summary": "the bounded attempt was settled"},
+            "updates": [
                 {
-                    "lens": "delivery",
-                    "change": "changed",
                     "previous_item_id": gap_id,
-                    "change_reason": "Run produced acceptance evidence",
-                    "epistemic_kind": "fact",
-                    "state": "aligned",
-                    "statement": "the expected result exists and validates",
-                    "evidence_refs": ["run://ledger"],
-                    "route": "none",
-                    "route_ref": None,
-                },
-                {
-                    "lens": "structure",
-                    "change": "retained",
-                    "previous_item_id": structure_id,
-                    "change_reason": "the source statement remains current",
-                    "epistemic_kind": "source-statement",
-                    "state": "aligned",
-                    "statement": "the fixture boundary is addressable",
-                    "evidence_refs": ["asset://repo"],
-                    "route": "retain",
-                    "route_ref": None,
+                    "reason": "Run produced acceptance evidence",
+                    "item": {
+                        "lens": "delivery",
+                        "epistemic_kind": "fact",
+                        "state": "aligned",
+                        "statement": "the expected result exists and validates",
+                        "evidence_refs": ["run://ledger"],
+                        "route": "none",
+                    },
                 },
             ],
-            "retired": [],
             "acceptance_results": [
                 {
                     "id": point_id,
-                    "judge_ref": "tool://fixture",
                     "result": "pass",
                     "actual_refs": ["actual://result"],
-                    "comparison_refs": ["comparison://validator"],
                     "evidence_refs": ["accept://result"],
                     "unknowns": [],
                 }
@@ -717,26 +722,26 @@ class Harness:
             "terminal_control_results": [
                 {
                     "id": terminal_id,
-                    "judge_ref": "tool://fixture",
                     "result": "pass",
                     "actual_refs": ["actual://budget"],
-                    "comparison_refs": ["comparison://budget"],
                     "evidence_refs": ["terminal://control"],
                     "unknowns": [],
                 }
             ],
+            "closure_actions": [],
+            "attributions": [],
+            "residual_effects": [],
             "result_disposition": {"state": "placed", "statement": "result remains in fixture", "refs": ["actual://result"]},
-            "incomplete_deliverable": None,
         }
         bad_finish_input = json.loads(json.dumps(finish_input))
-        bad_finish_input["acceptance_results"][0]["judge_ref"] = "tool://other-judge"
-        bad_finish_source = self.work / "finish-wrong-judge-input.json"
+        bad_finish_input["acceptance_results"][0]["comparison_refs"] = ["caller://scale"]
+        bad_finish_source = self.work / "finish-caller-comparison-input.json"
         write_json(bad_finish_source, bad_finish_input)
         self.refuse(
-            "Finish rejects wrong actual judge",
+            "Finish rejects caller comparison contract",
             self.command("k4-finish", "materialize"),
             "--input", str(bad_finish_source),
-            "--output", str(self.work / "never-finish-wrong-judge.json"),
+            "--output", str(self.work / "never-finish-caller-comparison.json"),
             "--run-log", str(log),
             "--bind", f"previous_account={observe0}",
             "--bind", f"goal={goal}",
@@ -796,12 +801,11 @@ class Harness:
             {
                 "kind": "operation-result",
                 "operation_id": zero_operation_id,
-                "result": "pass",
-                "eligibility_refs": ["eligibility://plan"],
+                "local_result": "pass",
                 "actual_output_refs": ["actual://zero-control-result"],
                 "evidence_refs": ["evidence://zero-control-operation"],
                 "trace_refs": ["trace://zero-control-operation"],
-                "invariant_checks": [],
+                "control_observations": [],
                 "findings": [],
                 "unknowns": [],
             },
@@ -825,7 +829,6 @@ class Harness:
             zero_plan,
         )
         zero_finish_input = json.loads(json.dumps(finish_input))
-        zero_finish_input["source_refs"] = ["asset://repo", "run://ledger", "accept://result"]
         zero_finish_input["acceptance_results"][0]["id"] = zero_point_id
         zero_finish_input["terminal_control_results"] = []
         zero_finish = self.work / "zero-control-finish.json"
@@ -891,12 +894,11 @@ class Harness:
             return {
                 "kind": "operation-result",
                 "operation_id": abort_operations[4],
-                "result": "pass",
-                "eligibility_refs": ["eligibility://abort-route"],
+                "local_result": "pass",
                 "actual_output_refs": ["actual://abort-state"],
                 "evidence_refs": ["evidence://abort-operation"],
                 "trace_refs": ["trace://abort-operation"],
-                "invariant_checks": [],
+                "control_observations": [],
                 "findings": [],
                 "unknowns": [],
             }
@@ -950,7 +952,7 @@ class Harness:
             "--bind", f"plan={abort_plan}",
         )
         open_document = read_json(open_projection)["document"]
-        if open_document["halted"] or open_document["execution_result"] is not None:
+        if open_document["halted"] or open_document["topology_status"] != "open":
             raise AssertionError("incomplete Run was converted into a terminal state")
         self.passed += 1
         print("PASS incomplete Run remains open")
@@ -993,22 +995,11 @@ class Harness:
         )
         abort_finish_input = json.loads(json.dumps(finish_input))
         abort_finish_input["cutoff"] = "after sourced abort"
-        abort_finish_input["source_refs"] = [
-            "asset://repo",
-            "run://abort-ledger",
-            "accept://abort",
-            "terminal://abort",
-            "abort://confirmation",
-            "abort://halt",
-            "abort://budget",
-            "abort://residual",
-        ]
         abort_finish_input["delta"] = {
             "summary": "the aborted attempt was settled without rewriting it as completion",
-            "evidence_refs": ["run://abort-ledger"],
         }
-        abort_finish_input["items"][0].update({
-            "change_reason": "Run ended by sourced abort",
+        abort_finish_input["updates"][0]["reason"] = "Run ended by sourced abort"
+        abort_finish_input["updates"][0]["item"].update({
             "state": "gap",
             "statement": "the expected result remains incomplete after abort",
             "evidence_refs": ["run://abort-ledger"],
@@ -1018,13 +1009,11 @@ class Harness:
         abort_finish_input["acceptance_results"][0].update({
             "result": "fail",
             "actual_refs": ["actual://absent-result"],
-            "comparison_refs": ["comparison://abort-acceptance"],
             "evidence_refs": ["accept://abort"],
         })
         abort_finish_input["terminal_control_results"][0].update({
             "result": "pass",
             "actual_refs": ["actual://abort-budget"],
-            "comparison_refs": ["comparison://abort-budget"],
             "evidence_refs": ["terminal://abort"],
         })
         abort_finish_input["result_disposition"] = {
@@ -1060,7 +1049,8 @@ class Harness:
         next_observe = self.work / "observe1.json"
         next_input = {
             "cutoff": "fresh observation after Finish",
-            "delta": {"summary": "fresh observation", "evidence_refs": ["observe://fresh"]},
+            "delta": {"summary": "fresh observation"},
+            "completeness": {"estimate": 1, "claim_limit": "fixture boundary", "remaining_angles": []},
             "updates": [
                 {
                     "previous_item_id": finish_account["items"][0]["item_id"],
@@ -1097,7 +1087,8 @@ class Harness:
         legacy_item["statement"] = f"{legacy_item['statement']} Re-observed under the delta-only interface."
         legacy_input = {
             "cutoff": "delta-only compatibility observation",
-            "delta": {"summary": "the legacy Account was re-observed", "evidence_refs": [legacy_item["evidence_refs"][0]]},
+            "delta": {"summary": "the legacy Account was re-observed"},
+            "completeness": {"estimate": 1, "claim_limit": "legacy fixture", "remaining_angles": []},
             "updates": [{"previous_item_id": legacy_previous["item_id"], "reason": "compatibility observation", "item": legacy_item}],
         }
         legacy_next = self.work / "observe-from-legacy-finish.json"

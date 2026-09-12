@@ -5,10 +5,11 @@ halted attempt. It binds the opening Account, Goal, Plan, and exact Run ledger;
 the Run projection used for settlement is derived mechanically from that ledger.
 
 The caller supplies a closing semantic delta (updates, additions, and
-retirements), actual acceptance and terminal-control judgments, result
-disposition, and failure-only incomplete content. The Tool carries every
-unmentioned predecessor forward and derives sources, continuity, judge refs,
-and canonical empty/null fields.
+retirements), actual acceptance and terminal-control judgments, closure
+actions, attribution, residual effects, result disposition, and failure-only
+incomplete content. The Tool carries every unmentioned predecessor forward
+and derives separate Account and closure sources, continuity, Goal-owned judge
+and comparison contracts, and canonical empty/null fields.
 
 Each update identifies one opening Account item and supplies its replacement
 item; an addition supplies a new item; a retirement identifies one opening item
@@ -31,11 +32,16 @@ current retained/changed/added items, retired predecessors, identities, and
 exact predecessor binding. Subject, boundary, and lenses remain unchanged.
 
 Closure is the stage report. It adds one pass/fail judgment for every Goal
-acceptance point and terminal control with the exact judge identity frozen by
-Goal, result disposition, incomplete package, and exact journal reference. The
-Tool derives operation counts, actual and not-run operations, Findings,
+acceptance point and terminal control with the exact judge and comparison
+contract frozen by Goal, actual Finish closure actions, attribution, residual
+effects, result disposition, incomplete package, and exact journal reference.
+The Tool derives operation counts, actual and not-run operations, Findings,
 unknowns, emergency patches, halt, ledger head, and the attempt result from the
 derived Run projection. Unknown is an annotation, not a third routing result.
+
+Account sources contain only evidence that supports Account items and
+retirements. Closure-only evidence has its own derived source closure, so
+settlement evidence does not silently become an Account fact.
 
 For an aborted attempt, closure also derives the confirmation source and
 reason, the Plan's response mode, planned and actual abort-response operations,
@@ -52,6 +58,8 @@ The complete trace is evidence for a separately authorized external audit.
 Finish performs internal reconciliation and terminal judgment; it does not
 become an independent auditor by possessing that evidence.
 
-Finish exposes no future Goal candidate and performs no repair, adoption, or
-publication. The generated Finish Account is a legal predecessor for the next
-Observe. Run public `--help` for exact fields and binding syntax.
+Finish exposes no future Goal candidate and performs no product-semantic
+repair, adoption, or publication. Its own authorized closure actions are
+limited to verify, cleanup, release, rollback, compensate, and package. The
+generated Finish Account is a legal predecessor for the next Observe. Run
+public `--help` for exact fields and binding syntax.

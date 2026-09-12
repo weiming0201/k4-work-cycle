@@ -25,7 +25,7 @@ context: _
 	content_sha256: #Digest
 })
 #GoalEnvelope: close({
-	schema:            "k4-goal-document/v7"
+	schema:            "k4-goal-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -70,52 +70,25 @@ context: _
 	pass: #OutcomeRoute
 	fail: #OutcomeRoute
 })
-#Judge: close({
-	kind:        "self" | "independent-agent" | "script" | "human"
-	ref:         #Text
-	claim_limit: #Text
-})
-#Precondition: close({
-	statement:      #Text
-	check_ref:      #Text
-	expected_state: #Text
-})
-#LocalJudgment: close({
-	subject_ref:                #Text
-	baseline_refs:              #NonEmptyStrings
-	actual_output_requirements: #NonEmptyStrings
-	required_evidence:          #NonEmptyStrings
-	pass_criteria:              #NonEmptyStrings
-	fail_criteria:              #NonEmptyStrings
-	check_ref:                  #Text
-	judge:                      #Judge
-})
-#FailureHandling: close({
-	mode:       "none" | "restore" | "compensate" | "preserve-stop"
-	target_ref: null | #Text
-	action_ref: null | #Text
-	check_ref:  null | #Text
-	reason:     #Text
-})
 #OperationInput: close({
-	phase:              #OperationPhase
-	operation_key:      #Text
-	depends_on_indices: #UInts
-	satisfies:          #Strings
-	controlled_by:      #Strings
-	tool_ref:           #Text
-	responsible_ref:    #Text
-	read_refs: *[] | #Strings
-	write_refs: *[] | #Strings
-	permission_refs: *[] | #Strings
-	resource_refs: *[] | #Strings
-	maximum_side_effects: *[] | #Strings
-	preconditions: [#Precondition, ...#Precondition]
-	local_judgment:   #LocalJudgment
-	idempotency:      #Text
-	retry_limit:      uint
-	failure_handling: #FailureHandling
-	on_result:        #OutcomeRoutesInput
+	phase:                #OperationPhase
+	operation_key:        #Text
+	depends_on_indices:   #UInts
+	satisfies:            #Strings
+	controlled_by:        #Strings
+	tool_ref:             #Text
+	responsible_ref:      #Text
+	read_refs:            #NonEmptyStrings
+	write_refs:           #NonEmptyStrings
+	permission_refs:      #NonEmptyStrings
+	resource_refs:        #NonEmptyStrings
+	maximum_side_effects: #NonEmptyStrings
+	pre_checks:           #NonEmptyStrings
+	post_checks:          #NonEmptyStrings
+	idempotency:          #Text
+	retry_limit:          uint
+	recovery:             #Text
+	on_result:            #OutcomeRoutesInput
 })
 #Operation: close({
 	operation_id:         #OperationID
@@ -126,17 +99,17 @@ context: _
 	controlled_by:        #Strings
 	tool_ref:             #Text
 	responsible_ref:      #Text
-	read_refs:            #Strings
-	write_refs:           #Strings
-	permission_refs:      #Strings
-	resource_refs:        #Strings
-	maximum_side_effects: #Strings
-	preconditions: [#Precondition, ...#Precondition]
-	local_judgment:   #LocalJudgment
-	idempotency:      #Text
-	retry_limit:      uint
-	failure_handling: #FailureHandling
-	on_result:        #OutcomeRoutes
+	read_refs:            #NonEmptyStrings
+	write_refs:           #NonEmptyStrings
+	permission_refs:      #NonEmptyStrings
+	resource_refs:        #NonEmptyStrings
+	maximum_side_effects: #NonEmptyStrings
+	pre_checks:           #NonEmptyStrings
+	post_checks:          #NonEmptyStrings
+	idempotency:          #Text
+	retry_limit:          uint
+	recovery:             #Text
+	on_result:            #OutcomeRoutes
 })
 #AbortResponseInput: close({
 	mode:                  "preserve-only" | "route"
@@ -188,7 +161,7 @@ context: _
 	status:   "executable" | "not-executable"
 })
 #Envelope: close({
-	schema:            "k4-plan-document/v8"
+	schema:            "k4-plan-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({goal: #Binding})
@@ -205,8 +178,6 @@ _availableReads:       _goal.value.document.execution_envelope.read_refs
 _availableWrites:      _goal.value.document.execution_envelope.write_refs
 _availableResources:   _goal.value.document.execution_envelope.resources
 _availableEffects:     _goal.value.document.execution_envelope.maximum_side_effects
-_goalSources:          _goal.value.document.source_refs
-_goalAuthorization:    _goal.value.document.execution_envelope.authorization_ref
 _pointJudges: {for point in _goal.value.document.acceptance_points {(point.point_id): point.judge}}
 _controlJudges: {for control in _goal.value.document.control_contracts {(control.control_id): control.judge}}
 
@@ -223,11 +194,11 @@ _operationIDs: [for operation in _input.operations {
 		permission_refs:      operation.permission_refs
 		resource_refs:        operation.resource_refs
 		maximum_side_effects: operation.maximum_side_effects
-		preconditions:        operation.preconditions
-		local_judgment:       operation.local_judgment
+		pre_checks:           operation.pre_checks
+		post_checks:          operation.post_checks
 		idempotency:          operation.idempotency
 		retry_limit:          operation.retry_limit
-		failure_handling:     operation.failure_handling
+		recovery:             operation.recovery
 	})
 	"op-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(_core))), 0, 16))"
 }]
@@ -298,11 +269,11 @@ _operations: [for index, operation in _input.operations {
 		permission_refs:      operation.permission_refs
 		resource_refs:        operation.resource_refs
 		maximum_side_effects: operation.maximum_side_effects
-		preconditions:        operation.preconditions
-		local_judgment:       operation.local_judgment
+		pre_checks:           operation.pre_checks
+		post_checks:          operation.post_checks
 		idempotency:          operation.idempotency
 		retry_limit:          operation.retry_limit
-		failure_handling:     operation.failure_handling
+		recovery:             operation.recovery
 		on_result: close({
 			pass: close({
 				next_operation_ids: [for target in operation.on_result.pass.next_operation_indices {_operationIDs[target]}]
@@ -399,24 +370,6 @@ _generateChecks: {
 		for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
 		for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
 		for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-		if len(operation.write_refs)+len(operation.maximum_side_effects) == 0 && operation.failure_handling.mode != "none" {_invalid: error("operations.failure_handling.mode: an operation without side effects must use none")}
-		if len(operation.write_refs)+len(operation.maximum_side_effects) > 0 && operation.failure_handling.mode == "none" {_invalid: error("operations.failure_handling.mode: an operation with possible side effects requires restore, compensate, or preserve-stop")}
-		if operation.failure_handling.mode == "none" {
-			if operation.failure_handling.target_ref != null || operation.failure_handling.action_ref != null || operation.failure_handling.check_ref != null {_invalid: error("operations.failure_handling: none requires null target_ref, action_ref, and check_ref")}
-		}
-		if operation.failure_handling.mode == "restore" || operation.failure_handling.mode == "compensate" {
-			if operation.failure_handling.target_ref == null || operation.failure_handling.action_ref == null || operation.failure_handling.check_ref == null {_invalid: error("operations.failure_handling: restore or compensate requires target_ref, action_ref, and check_ref")}
-			if operation.failure_handling.action_ref != null && !list.Contains(_availableTools, operation.failure_handling.action_ref) {_invalid: error("operations.failure_handling.action_ref: must be an available Goal tool")}
-		}
-		if operation.failure_handling.mode == "preserve-stop" {
-			if operation.failure_handling.target_ref == null || operation.failure_handling.action_ref != null || operation.failure_handling.check_ref == null {_invalid: error("operations.failure_handling: preserve-stop requires target_ref and check_ref, and a null action_ref")}
-		}
-		if operation.local_judgment.judge.kind == "independent-agent" && operation.local_judgment.judge.ref == operation.responsible_ref {_invalid: error("operations.local_judgment.judge: an independent judge cannot be the operation executor")}
-		if operation.local_judgment.judge.kind == "self" || operation.local_judgment.judge.kind == "independent-agent" {
-			if !list.Contains(_goalSources, operation.local_judgment.judge.ref) {_invalid: error("operations.local_judgment.judge.ref: self or independent judge must be sourceable from Goal sources")}
-		}
-		if operation.local_judgment.judge.kind == "script" && !list.Contains(_availableTools, operation.local_judgment.judge.ref) {_invalid: error("operations.local_judgment.judge.ref: script judge must be an available Goal tool")}
-		if operation.local_judgment.judge.kind == "human" && operation.local_judgment.judge.ref != _goalAuthorization {_invalid: error("operations.local_judgment.judge.ref: human judge must equal Goal authorization_ref")}
 		for dependency in operation.depends_on_indices {
 			if dependency >= index {_invalid: error("contract relation rejected: dependency >= index")}
 		}
@@ -487,7 +440,7 @@ _document: #Document & {
 	status:   _status
 }
 generate: _generateChecks & close({
-	schema: "k4-plan-document/v8"
+	schema: "k4-plan-document/v7"
 	bindings: close({goal: _goal.binding})
 	document: _document
 })
@@ -533,35 +486,16 @@ _expectedExistingOperationIDs: [for operation in _existing.document.operations {
 		permission_refs:      operation.permission_refs
 		resource_refs:        operation.resource_refs
 		maximum_side_effects: operation.maximum_side_effects
-		preconditions:        operation.preconditions
-		local_judgment:       operation.local_judgment
+		pre_checks:           operation.pre_checks
+		post_checks:          operation.post_checks
 		idempotency:          operation.idempotency
 		retry_limit:          operation.retry_limit
-		failure_handling:     operation.failure_handling
+		recovery:             operation.recovery
 	})))), 0, 16))"
 }]
 for index, operation in _existing.document.operations {
 	if operation.operation_id != _expectedExistingOperationIDs[index] {_invalid: error("contract relation rejected: operation.operation_id != _expectedExistingOperationIDs[index]")}
 	if !list.Contains(_availableTools, operation.tool_ref) {_invalid: error("contract relation rejected: !list.Contains(_availableTools, operation.tool_ref)")}
-	for ref in operation.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.permission_refs: every permission must be allowed by the Goal execution envelope")}}
-	for ref in operation.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.read_refs: every read position must be allowed by the Goal execution envelope")}}
-	for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
-	for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
-	for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-	if len(operation.write_refs)+len(operation.maximum_side_effects) == 0 && operation.failure_handling.mode != "none" {_invalid: error("operations.failure_handling.mode: an operation without side effects must use none")}
-	if len(operation.write_refs)+len(operation.maximum_side_effects) > 0 && operation.failure_handling.mode == "none" {_invalid: error("operations.failure_handling.mode: an operation with possible side effects requires restore, compensate, or preserve-stop")}
-	if operation.failure_handling.mode == "none" && (operation.failure_handling.target_ref != null || operation.failure_handling.action_ref != null || operation.failure_handling.check_ref != null) {_invalid: error("operations.failure_handling: none requires null refs")}
-	if operation.failure_handling.mode == "restore" || operation.failure_handling.mode == "compensate" {
-		if operation.failure_handling.target_ref == null || operation.failure_handling.action_ref == null || operation.failure_handling.check_ref == null {_invalid: error("operations.failure_handling: restore or compensate requires target_ref, action_ref, and check_ref")}
-		if operation.failure_handling.action_ref != null && !list.Contains(_availableTools, operation.failure_handling.action_ref) {_invalid: error("operations.failure_handling.action_ref: must be an available Goal tool")}
-	}
-	if operation.failure_handling.mode == "preserve-stop" && (operation.failure_handling.target_ref == null || operation.failure_handling.action_ref != null || operation.failure_handling.check_ref == null) {_invalid: error("operations.failure_handling: preserve-stop requires target_ref and check_ref, and a null action_ref")}
-	if operation.local_judgment.judge.kind == "independent-agent" && operation.local_judgment.judge.ref == operation.responsible_ref {_invalid: error("operations.local_judgment.judge: an independent judge cannot be the operation executor")}
-	if operation.local_judgment.judge.kind == "self" || operation.local_judgment.judge.kind == "independent-agent" {
-		if !list.Contains(_goalSources, operation.local_judgment.judge.ref) {_invalid: error("operations.local_judgment.judge.ref: self or independent judge must be sourceable from Goal sources")}
-	}
-	if operation.local_judgment.judge.kind == "script" && !list.Contains(_availableTools, operation.local_judgment.judge.ref) {_invalid: error("operations.local_judgment.judge.ref: script judge must be an available Goal tool")}
-	if operation.local_judgment.judge.kind == "human" && operation.local_judgment.judge.ref != _goalAuthorization {_invalid: error("operations.local_judgment.judge.ref: human judge must equal Goal authorization_ref")}
 	for dependency in operation.depends_on {
 		if _existingIndex[dependency] >= index {_invalid: error("contract relation rejected: _existingIndex[dependency] >= index")}
 	}

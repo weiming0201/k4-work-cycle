@@ -73,7 +73,6 @@ context: _
 	summary:       #Text
 	evidence_refs: #NonEmptyStrings
 })
-#DeltaInput: close({summary: #Text})
 #LensIndex: close({
 	lens: #Text
 	item_ids: [#ItemID, ...#ItemID] & list.UniqueItems()
@@ -90,27 +89,16 @@ context: _
 	items: [#Item, ...#Item]
 	retired: [...#Retired]
 })
-#Judge: close({
-	kind:        "self" | "independent-agent" | "script" | "human"
-	ref:         #Text
-	claim_limit: #Text
-})
 #JudgmentInput: close({
-	id:            #Text
-	result:        #Result
-	actual_refs:   #NonEmptyStrings
-	evidence_refs: #NonEmptyStrings
+	id:              #Text
+	judge_ref:       #Text
+	result:          #Result
+	actual_refs:     #NonEmptyStrings
+	comparison_refs: #NonEmptyStrings
+	evidence_refs:   #NonEmptyStrings
 	unknowns: [...#Unknown]
 })
-#Judgment: close({
-	id:                  #Text
-	judge:               #Judge
-	comparison_contract: _
-	result:              #Result
-	actual_refs:         #NonEmptyStrings
-	evidence_refs:       #NonEmptyStrings
-	unknowns: [...#Unknown]
-})
+#Judgment: #JudgmentInput
 #Disposition: close({
 	state:     "placed" | "pending" | "none"
 	statement: #Text
@@ -119,29 +107,6 @@ context: _
 #Incomplete: close({
 	statement: #Text
 	refs:      #NonEmptyStrings
-})
-#ClosureAction: close({
-	action_key:         #Text
-	kind:               "verify" | "cleanup" | "release" | "rollback" | "compensate" | "package"
-	authorized_by:      #NonEmptyStrings
-	result:             #Result
-	actual_refs:        #Strings
-	evidence_refs:      #NonEmptyStrings
-	actual_effect_refs: #Strings
-	findings: [...#Finding]
-	unknowns: [...#Unknown]
-})
-#Attribution: close({
-	stage:         "observe" | "goal" | "plan" | "run" | "finish"
-	statement:     #Text
-	evidence_refs: #NonEmptyStrings
-	claim_limit:   #Text
-})
-#ResidualEffect: close({
-	statement:       #Text
-	state:           #Text
-	refs:            #NonEmptyStrings
-	responsible_ref: #Text
 })
 #ClosureFinding: close({
 	origin:        "operation" | "emergency-patch"
@@ -179,10 +144,6 @@ context: _
 #Closure: close({
 	acceptance_results: [#Judgment, ...#Judgment]
 	terminal_control_results: [...#Judgment]
-	closure_source_refs: #Strings
-	closure_actions: [...#ClosureAction]
-	attributions: [...#Attribution]
-	residual_effects: [...#ResidualEffect]
 	attempt_result:    #Result
 	operation_summary: #OperationSummary
 	findings: [...#ClosureFinding]
@@ -202,7 +163,7 @@ context: _
 	closure: #Closure
 })
 #Envelope: close({
-	schema:            "k4-finish-document/v5"
+	schema:            "k4-finish-document/v4"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({
@@ -214,32 +175,26 @@ context: _
 	document: #Document
 })
 #AccountEnvelope: {
-	schema:            "k4-observe-document/v3"
+	schema:            "k4-observe-document/v2"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
 	document: {account: #Account, ...}
 }
 #GoalEnvelope: {
-	schema:            "k4-goal-document/v7"
+	schema:            "k4-goal-document/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {observe: #Binding, ...}
 	document: {
 		status: "frozen"
-		execution_envelope: {
-			authorization_ref:    #Text
-			permission_refs:      #NonEmptyStrings
-			maximum_side_effects: #NonEmptyStrings
-			...
-		}
-		acceptance_points: [{point_id: #Text, judge: #Judge, acceptance: _, ...}, ...]
-		control_contracts: [...{control_id: #Text, check_timing: "invariant" | "terminal", judge: #Judge, ...}]
+		acceptance_points: [{point_id: #Text, judge: {ref: #Text, ...}, ...}, ...]
+		control_contracts: [...{control_id: #Text, check_timing: "invariant" | "terminal", judge: {ref: #Text, ...}, ...}]
 		...
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v8"
+	schema:            "k4-plan-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding, ...}
@@ -251,7 +206,7 @@ context: _
 	}
 }
 #RunEnvelope: {
-	schema:            "k4-run-projection/v7"
+	schema:            "k4-run-projection/v6"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding, plan: #Binding, ...}
@@ -259,7 +214,7 @@ context: _
 		halted:                   true
 		event_count:              uint & >0
 		ledger_head_event_sha256: #Digest
-		topology_status:          "plan-complete" | "abort"
+		execution_result:         null | #Result
 		abort_confirmation: null | close({source_ref: #Text, reason: #Text, evidence_refs: #NonEmptyStrings, ...})
 		halt: close({
 			trigger:                   "plan-complete" | "abort"
@@ -267,8 +222,8 @@ context: _
 			resume_ref:                null | #Text
 			...
 		})
-		operations: [{operation_id: #OperationID, local_result: #Result | "not-run", ...}, ...]
-		operation_results: [...{operation_id: #OperationID, local_result: #Result, findings: [...#Finding], unknowns: [...#Unknown], ...}]
+		operations: [{operation_id: #OperationID, result: #Result | "not-run", ...}, ...]
+		operation_results: [...{operation_id: #OperationID, result: #Result, findings: [...#Finding], unknowns: [...#Unknown], ...}]
 		emergency_patches: [...{operation_id: #OperationID, findings: [...#Finding], unknowns: [...#Unknown], ...}]
 		invariant_control_results: [...{control_id: #Text, result: #Result, ...}]
 		...
@@ -279,15 +234,16 @@ context: _
 	value:   _
 })
 #Input: close({
-	cutoff: #Text
-	delta:  #DeltaInput
+	subject:     #Text
+	boundary:    #Text
+	cutoff:      #Text
+	source_refs: #NonEmptyStrings
+	lenses:      #NonEmptyStrings
+	delta:       #Delta
 	items: [#ItemInput, ...#ItemInput]
 	retired: [...#Retired]
 	acceptance_results: [#JudgmentInput, ...#JudgmentInput]
 	terminal_control_results: [...#JudgmentInput]
-	closure_actions: *[] | [...#ClosureAction]
-	attributions: *[] | [...#Attribution]
-	residual_effects: *[] | [...#ResidualEffect]
 	result_disposition:     #Disposition
 	incomplete_deliverable: null | #Incomplete
 })
@@ -334,49 +290,19 @@ _usedPrevious: list.Concat([
 	[for item in _generatedItems if item.previous_item_id != null {item.previous_item_id}],
 	[for item in _input.retired {item.previous_item_id}],
 ])
-_lensIndex: [for lensName in _previous.value.document.account.lenses {close({
+_lensIndex: [for lensName in _input.lenses {close({
 	lens: lensName
 	item_ids: [for item in _generatedItems if item.lens == lensName {item.item_id}]
 })
 }]
 _goalPointIDs: [for point in _goal.value.document.acceptance_points {point.point_id}]
-_goalPointByID: {for point in _goal.value.document.acceptance_points {(point.point_id): point}}
+_goalPointJudgeRefs: {for point in _goal.value.document.acceptance_points {(point.point_id): point.judge.ref}}
 _inputPointIDs: [for result in _input.acceptance_results {result.id}]
 _terminalControlIDs: [for control in _goal.value.document.control_contracts if control.check_timing == "terminal" {control.control_id}]
-_terminalControlByID: {for control in _goal.value.document.control_contracts if control.check_timing == "terminal" {(control.control_id): control}}
+_terminalControlJudgeRefs: {for control in _goal.value.document.control_contracts if control.check_timing == "terminal" {(control.control_id): control.judge.ref}}
 _inputTerminalIDs: [for result in _input.terminal_control_results {result.id}]
 _planOperationIDs: [for operation in _plan.value.document.operations {operation.operation_id}]
 _runOperationIDs: [for operation in _run.value.document.operations {operation.operation_id}]
-
-_acceptanceResults: [for judgment in _input.acceptance_results {close({
-	id:                  judgment.id
-	judge:               _goalPointByID[judgment.id].judge
-	comparison_contract: _goalPointByID[judgment.id].acceptance
-	result:              judgment.result
-	actual_refs:         judgment.actual_refs
-	evidence_refs:       judgment.evidence_refs
-	unknowns:            judgment.unknowns
-})
-}]
-_terminalControlResults: [for judgment in _input.terminal_control_results {
-	_control: _terminalControlByID[judgment.id]
-	close({
-		id:    judgment.id
-		judge: _control.judge
-		comparison_contract: close({
-			controlled_variable: _control.controlled_variable
-			allowed_domain:      _control.allowed_domain
-			forbidden_drift:     _control.forbidden_drift
-			required_trace:      _control.required_trace
-			check_method:        _control.check_method
-			check_timing:        _control.check_timing
-		})
-		result:        judgment.result
-		actual_refs:   judgment.actual_refs
-		evidence_refs: judgment.evidence_refs
-		unknowns:      judgment.unknowns
-	})
-}]
 
 _operationFindings: list.Concat([for result in _run.value.document.operation_results {
 	[for finding in result.findings {close({
@@ -435,14 +361,14 @@ _terminalUnknowns: list.Concat([for result in _input.terminal_control_results {
 }])
 _unknowns: list.Concat([_operationUnknowns, _patchUnknowns, _acceptanceUnknowns, _terminalUnknowns])
 
-_actualOperations: [for operation in _run.value.document.operations if operation.local_result != "not-run" {operation}]
-_notRunOperations: [for operation in _run.value.document.operations if operation.local_result == "not-run" {operation}]
-_passedOperations: [for operation in _run.value.document.operations if operation.local_result == "pass" {operation}]
-_failedOperations: [for operation in _run.value.document.operations if operation.local_result == "fail" {operation}]
+_actualOperations: [for operation in _run.value.document.operations if operation.result != "not-run" {operation}]
+_notRunOperations: [for operation in _run.value.document.operations if operation.result == "not-run" {operation}]
+_passedOperations: [for operation in _run.value.document.operations if operation.result == "pass" {operation}]
+_failedOperations: [for operation in _run.value.document.operations if operation.result == "fail" {operation}]
 _abortOperations: [for operation in _run.value.document.operations if operation.phase == "abort" {operation}]
-_actualAbortOperations: [for operation in _abortOperations if operation.local_result != "not-run" {operation}]
-_passedAbortOperations: [for operation in _abortOperations if operation.local_result == "pass" {operation}]
-_failedAbortOperations: [for operation in _abortOperations if operation.local_result == "fail" {operation}]
+_actualAbortOperations: [for operation in _abortOperations if operation.result != "not-run" {operation}]
+_passedAbortOperations: [for operation in _abortOperations if operation.result == "pass" {operation}]
+_failedAbortOperations: [for operation in _abortOperations if operation.result == "fail" {operation}]
 _abortSummary: null | #AbortSummary
 _abortEvidenceRefs: [...#Text]
 if _run.value.document.halt.trigger == "plan-complete" {
@@ -468,41 +394,27 @@ if _run.value.document.halt.trigger == "abort" {
 		residual_effect_refs:        _run.value.document.halt.side_effect_evidence_refs
 	})
 }
-_allAcceptancePass: len([for result in _acceptanceResults if result.result == "fail" {result}]) == 0
-_allTerminalPass: len([for result in _terminalControlResults if result.result == "fail" {result}]) == 0
+_allAcceptancePass: len([for result in _input.acceptance_results if result.result == "fail" {result}]) == 0
+_allTerminalPass: len([for result in _input.terminal_control_results if result.result == "fail" {result}]) == 0
 _allInvariantPass: len([for result in _run.value.document.invariant_control_results if result.result == "fail" {result}]) == 0
 _attemptResult: *"fail" | "pass"
 if _run.value.document.halt.trigger == "plan-complete" && _allAcceptancePass && _allTerminalPass && _allInvariantPass {
 	_attemptResult: "pass"
 }
 
-_accountEvidenceRaw: list.Concat(list.Concat([
+_allEvidence: list.Concat(list.Concat([
 	[for item in _generatedItems {item.evidence_refs}],
 	[for item in _input.retired {item.evidence_refs}],
-]))
-_accountSourceRefs: [for index, ref in _accountEvidenceRaw if len([for priorIndex, priorRef in _accountEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
-_closureEvidenceRaw: list.Concat(list.Concat([
-	[for result in _acceptanceResults {result.evidence_refs}],
-	[for result in _terminalControlResults {result.evidence_refs}],
+	[for result in _input.acceptance_results {result.evidence_refs}],
+	[for result in _input.terminal_control_results {result.evidence_refs}],
 	[for finding in _findings {finding.evidence_refs}],
 	[for unknown in _unknowns {unknown.basis_refs}],
-	[for action in _input.closure_actions {action.authorized_by}],
-	[for action in _input.closure_actions {action.actual_refs}],
-	[for action in _input.closure_actions {action.evidence_refs}],
-	[for action in _input.closure_actions {action.actual_effect_refs}],
-	[for action in _input.closure_actions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
-	[for action in _input.closure_actions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
-	[for attribution in _input.attributions {attribution.evidence_refs}],
-	[for effect in _input.residual_effects {effect.refs}],
 	[_abortEvidenceRefs],
 ]))
-_closureSourceRefs: [for index, ref in _closureEvidenceRaw if len([for priorIndex, priorRef in _closureEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 _changeEvidence: list.Concat(list.Concat([
 	[for item in _generatedItems if item.change != "retained" {item.evidence_refs}],
 	[for item in _input.retired {item.evidence_refs}],
 ]))
-_deltaEvidence: [for index, ref in _changeEvidence if len([for priorIndex, priorRef in _changeEvidence if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
-_delta: #Delta & {summary: _input.delta.summary, evidence_refs: _deltaEvidence}
 
 _generateChecks: {
 	_itemIDsUnique:  list.UniqueItems(_itemIDs) & true
@@ -513,13 +425,16 @@ _generateChecks: {
 	if _plan.value.bindings.goal != _goal.binding {_invalid: error("contract relation rejected: _plan.value.bindings.goal != _goal.binding")}
 	if _run.value.bindings.goal != _goal.binding {_invalid: error("contract relation rejected: _run.value.bindings.goal != _goal.binding")}
 	if _run.value.bindings.plan != _plan.binding {_invalid: error("contract relation rejected: _run.value.bindings.plan != _plan.binding")}
+	if _input.subject != _previous.value.document.account.subject {_invalid: error("contract relation rejected: _input.subject != _previous.value.document.account.subject")}
+	if _input.boundary != _previous.value.document.account.boundary {_invalid: error("contract relation rejected: _input.boundary != _previous.value.document.account.boundary")}
+	if _input.lenses != _previous.value.document.account.lenses {_invalid: error("contract relation rejected: _input.lenses != _previous.value.document.account.lenses")}
 	if _runOperationIDs != _planOperationIDs {_invalid: error("contract relation rejected: _runOperationIDs != _planOperationIDs")}
 	if len(_usedPrevious) != len(_previousIDs) {_invalid: error("contract relation rejected: len(_usedPrevious) != len(_previousIDs)")}
 	for previousID in _previousIDs {
 		if !list.Contains(_usedPrevious, previousID) {_invalid: error("contract relation rejected: !list.Contains(_usedPrevious, previousID)")}
 	}
 	for item in _generatedItems {
-		if !list.Contains(_previous.value.document.account.lenses, item.lens) {_invalid: error("closing item lens must already exist in the opening Account")}
+		if !list.Contains(_input.lenses, item.lens) {_invalid: error("contract relation rejected: !list.Contains(_input.lenses, item.lens)")}
 		if item.route == "goal-candidate" {_invalid: error("contract relation rejected: item.route == \"goal-candidate\"")}
 		if item.route == "external" && item.route_ref == null {_invalid: error("contract relation rejected: item.route == \"external\" && item.route_ref == null")}
 		if item.route != "external" && item.route_ref != null {_invalid: error("contract relation rejected: item.route != \"external\" && item.route_ref != null")}
@@ -531,60 +446,65 @@ _generateChecks: {
 			if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: error("contract relation rejected: item.change == \"changed\" && item.item_id == item.previous_item_id")}
 		}
 		for ref in item.evidence_refs {
-			if !list.Contains(_accountSourceRefs, ref) {_invalid: error("item evidence must be present in derived Account sources")}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 		}
 		if item.change != "retained" {
-			if len([for ref in item.evidence_refs if list.Contains(_deltaEvidence, ref) {ref}]) == 0 {_invalid: error("changed item evidence must be present in the derived Account delta")}
+			if len([for ref in item.evidence_refs if list.Contains(_input.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: error("contract relation rejected: len([for ref in item.evidence_refs if list.Contains(_input.delta.evidence_refs, ref) {ref}]) == 0")}
 		}
 	}
-	for lens in _previous.value.document.account.lenses {
+	for lens in _input.lenses {
 		if len([for item in _generatedItems if item.lens == lens {item}]) == 0 {_invalid: error("contract relation rejected: len([for item in _generatedItems if item.lens == lens {item}]) == 0")}
 	}
 	for retired in _input.retired {
 		if !list.Contains(_previousIDs, retired.previous_item_id) {_invalid: error("contract relation rejected: !list.Contains(_previousIDs, retired.previous_item_id)")}
 		for ref in retired.evidence_refs {
-			if !list.Contains(_accountSourceRefs, ref) {_invalid: error("retirement evidence must be present in derived Account sources")}
-			if !list.Contains(_deltaEvidence, ref) {_invalid: error("retirement evidence must be present in the derived Account delta")}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
+			if !list.Contains(_input.delta.evidence_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.delta.evidence_refs, ref)")}
 		}
 	}
 	for result in list.Concat([_input.acceptance_results, _input.terminal_control_results]) {
 		for ref in result.evidence_refs {
-			if !list.Contains(_closureSourceRefs, ref) {_invalid: error("judgment evidence must be present in derived closure sources")}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 		}
 		for unknown in result.unknowns {
 			for ref in unknown.basis_refs {
-				if !list.Contains(_closureSourceRefs, ref) {_invalid: error("judgment unknown evidence must be present in derived closure sources")}
+				if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 			}
 		}
 	}
 	for finding in _findings {
 		for ref in finding.evidence_refs {
-			if !list.Contains(_closureSourceRefs, ref) {_invalid: error("Run finding evidence must be present in derived closure sources")}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 		}
 	}
 	for unknown in list.Concat([_operationUnknowns, _patchUnknowns]) {
 		for ref in unknown.basis_refs {
-			if !list.Contains(_closureSourceRefs, ref) {_invalid: error("Run unknown evidence must be present in derived closure sources")}
+			if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
 		}
+	}
+	for ref in _input.source_refs {
+		if !list.Contains(_allEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_allEvidence, ref)")}
 	}
 	for ref in _abortEvidenceRefs {
-		if !list.Contains(_closureSourceRefs, ref) {_invalid: error("abort evidence must be present in derived closure sources")}
+		if !list.Contains(_input.source_refs, ref) {_invalid: error("abort evidence must be declared in source_refs")}
 	}
-	for action in _input.closure_actions {
-		for ref in action.authorized_by {
-			if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_goal.value.document.execution_envelope.permission_refs, ref) {_invalid: error("closure action authority must be present in the Goal execution envelope")}
-		}
-		for ref in action.actual_effect_refs {
-			if !list.Contains(_goal.value.document.execution_envelope.maximum_side_effects, ref) {_invalid: error("closure action effect must be present in the Goal maximum side effects")}
-		}
+	for ref in _input.delta.evidence_refs {
+		if !list.Contains(_input.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_input.source_refs, ref)")}
+		if !list.Contains(_changeEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_changeEvidence, ref)")}
 	}
 	if len(_inputPointIDs) != len(_goalPointIDs) {_invalid: error("contract relation rejected: len(_inputPointIDs) != len(_goalPointIDs)")}
 	for id in _goalPointIDs {
 		if !list.Contains(_inputPointIDs, id) {_invalid: error("contract relation rejected: !list.Contains(_inputPointIDs, id)")}
 	}
+	for result in _input.acceptance_results {
+		if list.Contains(_goalPointIDs, result.id) && result.judge_ref != _goalPointJudgeRefs[result.id] {_invalid: error("acceptance_results.judge_ref: actual judge must equal the Goal acceptance judge")}
+	}
 	if len(_inputTerminalIDs) != len(_terminalControlIDs) {_invalid: error("contract relation rejected: len(_inputTerminalIDs) != len(_terminalControlIDs)")}
 	for id in _terminalControlIDs {
 		if !list.Contains(_inputTerminalIDs, id) {_invalid: error("contract relation rejected: !list.Contains(_inputTerminalIDs, id)")}
+	}
+	for result in _input.terminal_control_results {
+		if list.Contains(_terminalControlIDs, result.id) && result.judge_ref != _terminalControlJudgeRefs[result.id] {_invalid: error("terminal_control_results.judge_ref: actual judge must equal the Goal terminal-control judge")}
 	}
 	if _attemptResult == "pass" && _input.incomplete_deliverable != null {_invalid: error("contract relation rejected: _attemptResult == \"pass\" && _input.incomplete_deliverable != null")}
 	if _attemptResult == "fail" && _input.incomplete_deliverable == null {_invalid: error("contract relation rejected: _attemptResult == \"fail\" && _input.incomplete_deliverable == null")}
@@ -593,23 +513,19 @@ _generateChecks: {
 _document: #Document & {
 	account: {
 		revision:    _previous.value.document.account.revision + 1
-		subject:     _previous.value.document.account.subject
-		boundary:    _previous.value.document.account.boundary
+		subject:     _input.subject
+		boundary:    _input.boundary
 		cutoff:      _input.cutoff
-		source_refs: _accountSourceRefs
-		lenses:      _previous.value.document.account.lenses
+		source_refs: _input.source_refs
+		lenses:      _input.lenses
 		lens_index:  _lensIndex
-		delta:       _delta
+		delta:       _input.delta
 		items:       _generatedItems
 		retired:     _input.retired
 	}
 	closure: {
-		acceptance_results:       _acceptanceResults
-		terminal_control_results: _terminalControlResults
-		closure_source_refs:      _closureSourceRefs
-		closure_actions:          _input.closure_actions
-		attributions:             _input.attributions
-		residual_effects:         _input.residual_effects
+		acceptance_results:       _input.acceptance_results
+		terminal_control_results: _input.terminal_control_results
 		attempt_result:           _attemptResult
 		operation_summary: {
 			planned:           len(_planOperationIDs)
@@ -636,7 +552,7 @@ _document: #Document & {
 }
 
 generate: _generateChecks & close({
-	schema:   "k4-finish-document/v5"
+	schema:   "k4-finish-document/v4"
 	bindings: _bindings
 	document: _document
 })
@@ -686,27 +602,15 @@ _existingTerminalUnknowns: list.Concat([for result in _existing.document.closure
 	}]
 }])
 _expectedExistingUnknowns: list.Concat([_operationUnknowns, _patchUnknowns, _existingAcceptanceUnknowns, _existingTerminalUnknowns])
-_existingAccountEvidenceRaw: list.Concat(list.Concat([
+_existingAllEvidence: list.Concat(list.Concat([
 	[for item in _existingItems {item.evidence_refs}],
 	[for item in _existing.document.account.retired {item.evidence_refs}],
-]))
-_expectedExistingAccountSources: [for index, ref in _existingAccountEvidenceRaw if len([for priorIndex, priorRef in _existingAccountEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
-_existingClosureEvidenceRaw: list.Concat(list.Concat([
 	[for result in _existing.document.closure.acceptance_results {result.evidence_refs}],
 	[for result in _existing.document.closure.terminal_control_results {result.evidence_refs}],
 	[for finding in _existing.document.closure.findings {finding.evidence_refs}],
 	[for unknown in _existing.document.closure.unknowns {unknown.basis_refs}],
-	[for action in _existing.document.closure.closure_actions {action.authorized_by}],
-	[for action in _existing.document.closure.closure_actions {action.actual_refs}],
-	[for action in _existing.document.closure.closure_actions {action.evidence_refs}],
-	[for action in _existing.document.closure.closure_actions {action.actual_effect_refs}],
-	[for action in _existing.document.closure.closure_actions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
-	[for action in _existing.document.closure.closure_actions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
-	[for attribution in _existing.document.closure.attributions {attribution.evidence_refs}],
-	[for effect in _existing.document.closure.residual_effects {effect.refs}],
 	[_abortEvidenceRefs],
 ]))
-_expectedExistingClosureSources: [for index, ref in _existingClosureEvidenceRaw if len([for priorIndex, priorRef in _existingClosureEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 _existingChangeEvidence: list.Concat(list.Concat([
 	[for item in _existingItems if item.change != "retained" {item.evidence_refs}],
 	[for item in _existing.document.account.retired {item.evidence_refs}],
@@ -779,36 +683,29 @@ _validateChecks: {
 	}
 	for result in list.Concat([_existing.document.closure.acceptance_results, _existing.document.closure.terminal_control_results]) {
 		for ref in result.evidence_refs {
-			if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("judgment evidence must be present in closure sources")}
+			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 		}
 		for unknown in result.unknowns {
 			for ref in unknown.basis_refs {
-				if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("judgment unknown evidence must be present in closure sources")}
+				if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 			}
 		}
 	}
 	for finding in _existing.document.closure.findings {
 		for ref in finding.evidence_refs {
-			if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("Run finding evidence must be present in closure sources")}
+			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 		}
 	}
 	for unknown in _existing.document.closure.unknowns {
 		for ref in unknown.basis_refs {
-			if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("Run unknown evidence must be present in closure sources")}
+			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 		}
 	}
-	if _existing.document.account.source_refs != _expectedExistingAccountSources {_invalid: error("Account sources must be derived only from Account item and retirement evidence")}
-	if _existing.document.closure.closure_source_refs != _expectedExistingClosureSources {_invalid: error("closure sources must equal the derived closure-only source set")}
+	for ref in _existing.document.account.source_refs {
+		if !list.Contains(_existingAllEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_existingAllEvidence, ref)")}
+	}
 	for ref in _abortEvidenceRefs {
-		if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("abort evidence must be present in closure sources")}
-	}
-	for action in _existing.document.closure.closure_actions {
-		for ref in action.authorized_by {
-			if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_goal.value.document.execution_envelope.permission_refs, ref) {_invalid: error("closure action authority must be present in the Goal execution envelope")}
-		}
-		for ref in action.actual_effect_refs {
-			if !list.Contains(_goal.value.document.execution_envelope.maximum_side_effects, ref) {_invalid: error("closure action effect must be present in the Goal maximum side effects")}
-		}
+		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("abort evidence must be declared in account.source_refs")}
 	}
 	for ref in _existing.document.account.delta.evidence_refs {
 		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
@@ -819,23 +716,14 @@ _validateChecks: {
 		if !list.Contains(_existingPointIDs, id) {_invalid: error("contract relation rejected: !list.Contains(_existingPointIDs, id)")}
 	}
 	for result in _existing.document.closure.acceptance_results {
-		if list.Contains(_goalPointIDs, result.id) && result.judge != _goalPointByID[result.id].judge {_invalid: error("acceptance judge must equal the Goal judge")}
-		if list.Contains(_goalPointIDs, result.id) && result.comparison_contract != _goalPointByID[result.id].acceptance {_invalid: error("acceptance comparison contract must equal the Goal acceptance contract")}
+		if list.Contains(_goalPointIDs, result.id) && result.judge_ref != _goalPointJudgeRefs[result.id] {_invalid: error("acceptance_results.judge_ref: actual judge must equal the Goal acceptance judge")}
 	}
 	if len(_existingTerminalIDs) != len(_terminalControlIDs) {_invalid: error("contract relation rejected: len(_existingTerminalIDs) != len(_terminalControlIDs)")}
 	for id in _terminalControlIDs {
 		if !list.Contains(_existingTerminalIDs, id) {_invalid: error("contract relation rejected: !list.Contains(_existingTerminalIDs, id)")}
 	}
 	for result in _existing.document.closure.terminal_control_results {
-		if list.Contains(_terminalControlIDs, result.id) && result.judge != _terminalControlByID[result.id].judge {_invalid: error("terminal control judge must equal the Goal judge")}
-		if list.Contains(_terminalControlIDs, result.id) && result.comparison_contract != close({
-			controlled_variable: _terminalControlByID[result.id].controlled_variable
-			allowed_domain:      _terminalControlByID[result.id].allowed_domain
-			forbidden_drift:     _terminalControlByID[result.id].forbidden_drift
-			required_trace:      _terminalControlByID[result.id].required_trace
-			check_method:        _terminalControlByID[result.id].check_method
-			check_timing:        _terminalControlByID[result.id].check_timing
-		}) {_invalid: error("terminal control comparison contract must equal the Goal control contract")}
+		if list.Contains(_terminalControlIDs, result.id) && result.judge_ref != _terminalControlJudgeRefs[result.id] {_invalid: error("terminal_control_results.judge_ref: actual judge must equal the Goal terminal-control judge")}
 	}
 	if _existing.document.closure.attempt_result != _expectedExistingAttemptResult {_invalid: error("contract relation rejected: _existing.document.closure.attempt_result != _expectedExistingAttemptResult")}
 	if _existing.document.closure.operation_summary != _expectedOperationSummary {_invalid: error("contract relation rejected: _existing.document.closure.operation_summary != _expectedOperationSummary")}

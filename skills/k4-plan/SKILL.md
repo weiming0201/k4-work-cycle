@@ -1,44 +1,61 @@
 ---
 name: k4-plan
-description: Freeze one exact Goal into one selected, finite operation DAG with pass/fail routing. Use after k4-goal and before execution; do not perform operations or revise the Goal.
+description: Compile one exact frozen Goal into a finite contingent partial-order policy for execution. Use after k4-goal to fix dependencies, concurrency, binary routes, checks, and abort handling without performing operations or declaring actual results.
 ---
 
 # K4 Plan
 
-Freeze the task-specific control flow that Run will consume.
+Compile a static launch decision into the dynamic policy that Run will consume.
 
-## Boundary
+## Mandate
 
-- Require one exact frozen Goal; otherwise return to `k4-goal`.
-- Keep every tool, permission, read/write position, resource, and maximum
-  effect inside the Goal's frozen execution envelope.
-- Search, inspect, and compare alternatives as needed within the Goal boundary.
-- For a complex Goal, compare two or three materially different candidate DAGs
-  when that comparison improves selection; freeze only the selected Plan and a
-  concise selection rationale.
-- Every operation has exactly two result edges, `pass` and `fail`. Both may
-  point to the same successor. Fork, join, and end are structural positions,
-  not semantic result types.
-- Freeze one Plan-level `on_abort` response: preserve evidence only, or enter
-  one separate forward response route. Abort is not a third operation result,
-  and response operations cannot claim Goal acceptance.
-- Findings and unknowns remain annotations. They do not create a third route.
-- Do not alter Goal criteria, perform work, record actual results, or repair
-  missing authority.
+Plan alone selects and freezes the finite operation graph by which one exact
+Goal may be attempted. It owns operation boundaries, dependency order,
+concurrency, pass/fail routing, checks, and abort policy. It does not own the
+Goal, execute an operation, or know which result will occur.
 
-## Stable result
+## Policy
 
-The selected Plan fixes the normal entry, Plan-level abort response, operation graph, Goal coverage, tools,
-read/write positions, permissions, resources, maximum effects, checks, and
-both result edges. Every operational boundary is a subset of the Goal envelope.
-All graph edges move forward in topological order. A change to those decisions
-requires a new Plan.
+- Require one exact frozen Goal. If a missing value, scope, acceptance,
+  authority, resource, control, effect, or audit boundary prevents planning,
+  use the permitted return to Goal rather than silently repairing it.
+- Reason, inspect, search, simulate, and compare alternatives as needed for the
+  planning responsibility. Such work informs the Plan; it does not itself
+  become execution evidence or alter the Goal.
+- Keep every operation's tools, permissions, read/write positions, resources,
+  and maximum effects within the Goal's execution envelope.
+- Give each real operation exactly two result edges, `pass` and `fail`; the two
+  edges may share a successor. Use only start, fork, join, and end as virtual
+  positions. Keep the graph acyclic and leave genuinely independent work
+  unordered.
+- A probe may be worthwhile for its information value even when its direct
+  success probability is low, provided every resulting route remains within
+  Goal.
+- Freeze one Plan-level abort policy. Abort is an external or runtime inability
+  to continue the graph, not a third operation result.
+- Findings and unknowns are annotations, not routes. Coverage links operations
+  to possible acceptance evidence; it does not declare any Goal point
+  satisfied.
+- Do not execute work, record actual results, revise Goal, or declare whether
+  the attempt succeeds.
 
-## Materialize
+## Procedure
 
-Run `scripts/materialize --help` for the public input contract. Give temporary
-semantic JSON to the script and bind the exact Goal. The deterministic Tool
-creates the stable DAG and its start/fork/join/end projection.
+Develop the smallest finite graph that can exercise the frozen Goal. Compare
+materially different candidate graphs when doing so changes the selection,
+challenge dependencies and failure routes, then freeze one graph with its
+selection rationale. Run `scripts/materialize --help`, supply only the semantic
+choices requested by that public interface, and bind the exact Goal. The Tool
+derives identifiers, bindings, graph projections, and other deterministic
+structure.
+
+## Disposition
+
+The stable result is one selected executable Plan: normal entry, abort policy,
+finite partial-order graph, Goal coverage, operation envelopes, checks, and
+binary routes. It records possibilities only. Run consumes it and actual
+evidence selects a route. A semantic change to the process policy requires a
+new Plan.
 
 Do not hand-author or patch stable JSON. Ordinary use does not require reading
 the CUE contract or Tool source. Correct named public omissions or

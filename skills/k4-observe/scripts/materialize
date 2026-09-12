@@ -32,12 +32,14 @@ Options:
 
 Bootstrap input:
   subject, boundary, cutoff: nonempty strings
-  delta: {summary, evidence_refs}
+  delta: {summary}
+  completeness: {estimate, claim_limit, remaining_angles}
   additions[]: {reason, item}
 
 Iteration input:
   cutoff: nonempty string
-  delta: {summary, evidence_refs}
+  delta: {summary}
+  completeness: {estimate, claim_limit, remaining_angles}
   updates[]: {previous_item_id, reason, item}                 (optional)
   additions[]: {reason, item}                                (optional)
   retirements[]: {previous_item_id, reason, evidence_refs}   (optional)
@@ -54,7 +56,7 @@ Item:
 Generated fields:
   mode, subject/boundary continuity, revision, retained items, change,
   previous_item_id, source_refs, lenses, lens_index, delta evidence,
-  item ids, bindings, time, and hashes.
+  state indexes, item ids, bindings, time, and hashes.
 
 Exit status: 0 on materialization; 1 without output on refusal.
 All detected public-input errors are returned together with field paths.
@@ -110,10 +112,30 @@ def text_list(value: Any, path: str, errors: list[str]) -> None:
 
 
 def delta(value: Any, path: str, errors: list[str]) -> None:
-    if not exact_object(value, path, {"summary", "evidence_refs"}, set(), errors):
+    if not exact_object(value, path, {"summary"}, set(), errors):
         return
     text(value.get("summary"), f"{path}.summary", errors)
-    text_list(value.get("evidence_refs"), f"{path}.evidence_refs", errors)
+
+
+def completeness(value: Any, path: str, errors: list[str]) -> None:
+    if not exact_object(value, path, {"estimate", "claim_limit", "remaining_angles"}, set(), errors):
+        return
+    estimate = value.get("estimate")
+    if not isinstance(estimate, (int, float)) or isinstance(estimate, bool) or not 0 <= estimate <= 1:
+        errors.append(f"{path}.estimate: must be a number from 0 through 1")
+    text(value.get("claim_limit"), f"{path}.claim_limit", errors)
+    angles = value.get("remaining_angles")
+    if not isinstance(angles, list):
+        errors.append(f"{path}.remaining_angles: must be an array of unique nonempty strings")
+        return
+    seen: set[str] = set()
+    for index, item in enumerate(angles):
+        if not isinstance(item, str) or not item:
+            errors.append(f"{path}.remaining_angles[{index}]: must be a nonempty string")
+        elif item in seen:
+            errors.append(f"{path}.remaining_angles[{index}]: duplicates {item!r}")
+        else:
+            seen.add(item)
 
 
 def semantic_item(value: Any, path: str, errors: list[str]) -> dict[str, Any] | None:
@@ -164,38 +186,10 @@ def item_id(value: Any, path: str, errors: list[str]) -> None:
         errors.append(f"{path}: must match item-[0-9a-f]{{16}}")
 
 
-def evidence_closure(candidate: dict[str, Any], changed: list[tuple[str, dict[str, Any]]], retired: list[tuple[str, dict[str, Any]]], errors: list[str]) -> None:
-    delta_value = candidate.get("delta")
-    if not isinstance(delta_value, dict) or not isinstance(delta_value.get("evidence_refs"), list):
-        return
-    delta_refs = {ref for ref in delta_value["evidence_refs"] if isinstance(ref, str) and ref}
-    supported: set[str] = set()
-    for path, item in changed:
-        refs = item.get("evidence_refs")
-        if not isinstance(refs, list):
-            continue
-        valid_refs = {ref for ref in refs if isinstance(ref, str) and ref}
-        supported.update(valid_refs)
-        if valid_refs.isdisjoint(delta_refs):
-            errors.append(f"{path}.evidence_refs: must cite at least one input.delta.evidence_refs entry")
-    for path, entry in retired:
-        refs = entry.get("evidence_refs")
-        if not isinstance(refs, list):
-            continue
-        for index, ref in enumerate(refs):
-            if isinstance(ref, str) and ref:
-                supported.add(ref)
-                if ref not in delta_refs:
-                    errors.append(f"{path}.evidence_refs[{index}]: must occur in input.delta.evidence_refs")
-    for index, ref in enumerate(delta_value["evidence_refs"]):
-        if isinstance(ref, str) and ref and ref not in supported:
-            errors.append(f"input.delta.evidence_refs[{index}]: must support an update, addition, or retirement")
-
-
 def preflight(candidate: Any, previous: dict[str, Any] | None) -> list[str]:
     errors: list[str] = []
     if previous is None:
-        required = {"subject", "boundary", "cutoff", "delta", "additions"}
+        required = {"subject", "boundary", "cutoff", "delta", "completeness", "additions"}
         if not exact_object(candidate, "input", required, set(), errors):
             return errors
         for key in ("subject", "boundary", "cutoff"):
@@ -203,11 +197,12 @@ def preflight(candidate: Any, previous: dict[str, Any] | None) -> list[str]:
                 text(candidate[key], f"input.{key}", errors)
         if "delta" in candidate:
             delta(candidate["delta"], "input.delta", errors)
-        valid_additions = additions(candidate.get("additions"), "input.additions", errors, True)
-        evidence_closure(candidate, [(f"input.additions[{index}].item", entry["item"]) for index, entry in valid_additions], [], errors)
+        if "completeness" in candidate:
+            completeness(candidate["completeness"], "input.completeness", errors)
+        additions(candidate.get("additions"), "input.additions", errors, True)
         return errors
 
-    required = {"cutoff", "delta"}
+    required = {"cutoff", "delta", "completeness"}
     optional = {"updates", "additions", "retirements"}
     if not exact_object(candidate, "input", required, optional, errors):
         return errors
@@ -215,6 +210,8 @@ def preflight(candidate: Any, previous: dict[str, Any] | None) -> list[str]:
         text(candidate["cutoff"], "input.cutoff", errors)
     if "delta" in candidate:
         delta(candidate["delta"], "input.delta", errors)
+    if "completeness" in candidate:
+        completeness(candidate["completeness"], "input.completeness", errors)
 
     raw_updates = candidate.get("updates", [])
     raw_additions = candidate.get("additions", [])
@@ -280,8 +277,6 @@ def preflight(candidate: Any, previous: dict[str, Any] | None) -> list[str]:
                 touched[reference] = path
             if reference not in previous_by_id:
                 errors.append(f"{path}.previous_item_id: not found in previous Account")
-    valid_changes = valid_updates + [(f"input.additions[{index}].item", entry["item"]) for index, entry in valid_additions]
-    evidence_closure(candidate, valid_changes, valid_retirements, errors)
     return errors
 
 

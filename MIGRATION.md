@@ -1,12 +1,29 @@
 # Versioned migration
 
+## 0.8.0 to 0.9.0
+
+Release `0.9.0` introduces new stable semantic obligations and therefore does
+not reinterpret an existing chain in place. New work starts with Observe v3,
+then Goal v7, Plan v8, Run event/projection v7, and Finish v5. Existing Observe
+v2, Goal v6, Plan v7, Run v6, and Finish v4 artifacts remain valid under the
+exact frozen contracts in `tools/contracts/0.8.0/`.
+
+The new fields are not safely inferable from old artifacts: observation
+completeness, decision basis, change surface, boundary-feasibility findings,
+each operation's local judgment and structured failure handling, and Finish
+closure actions, attribution and residual effects all require new semantic
+work. For that reason this release supplies no automatic chain migration.
+Continue and settle an already-running old chain with the old contracts; then
+start the next Account revision through the v0.9.0 Observe entrypoint.
+
 ## 0.7.0 to 0.8.0
 
-No stable artifact migration is required. Release `0.8.0` minimizes temporary
+No stable artifact migration is required. Release `0.8.0` minimized temporary
 caller input while retaining the Observe v2, Goal v6, Plan v7, Run v6, and
 Finish v4 stable schemas. Existing full inputs remain accepted when their
 formerly caller-maintained fields agree with deterministic derivation. New
-callers should use each entrypoint's current `--help`.
+callers used each v0.8.0 entrypoint's `--help`; v0.9.0 public entrypoints accept
+semantic input only.
 
 The minimized Finish entrypoint refuses duplicate or unknown updates,
 update-retirement collisions, invalid closing routes, and missing required

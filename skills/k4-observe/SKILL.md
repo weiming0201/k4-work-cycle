@@ -1,49 +1,60 @@
 ---
 name: k4-observe
-description: Maintain one sourced opening Account through multiple declared observation lenses and expose current gaps and opportunities before Goal selection. Use at cold start or after a prior Finish; do not define acceptance, choose operations, repair the subject, or close an attempt.
+description: Stabilize external evidence into one sourced Account of current facts, uncertainties, gaps, and opportunities. Use at cold start, on an authorized pre-run return, or after Finish; do not select or execute the next change.
 ---
 
 # K4 Observe
 
-Create the current opening Account for one bounded subject.
+Turn bounded external evidence into the shared static Account from which Goal
+may make one launch decision.
 
-## Boundary
+## Mandate
 
-- Treat authoritative Assets and evidence as the observed sources. The Account
-  is their derived, source-bound general ledger, not a replacement authority.
-- Maintain one Account through multiple declared observation lenses. A lens is
-  a useful view of the same subject, such as structure, behavior, dependencies,
-  or another task-relevant perspective; it is not a second ledger.
+Observe alone admits external information into the pre-run factual surface. It
+maintains one source-bound general ledger for one subject and boundary. The
+Account is a derived view of authoritative Assets and evidence, never their
+replacement authority.
+
+## Policy
+
 - Bootstrap without a predecessor, or iterate one exact Account produced by
-  Observe or Finish. Changed subject or boundary requires a new bootstrap.
-- On iteration provide only the semantic delta: changed predecessor items,
-  additions, retirements, reasons, and evidence. The Tool retains every
-  unmentioned predecessor and derives continuity and aggregate fields.
+  Observe or Finish. A permitted pre-run return also iterates that Account.
+  Changed subject or boundary requires a new bootstrap.
 - Keep facts, source statements, inferences, preferences, conflicts, gaps, and
-  unknowns distinguishable. A `goal-candidate` is only an opportunity.
-- Do not select a Goal, define acceptance, choose operations, modify the
-  observed subject, execute work, or close an attempt.
+  unknowns distinguishable. A `goal-candidate` is an opportunity, not a Goal.
+- Use serial lenses over the same Account. A lens is one view of the subject,
+  not a second ledger or an independent authority.
+- Later stages may reason, search, test, and report what they notice. Evidence
+  needed to change the shared pre-run factual surface returns through Observe;
+  it does not let another stage patch the Account or exercise Observe's
+  responsibility.
+- Observe does not define acceptance, select a Goal, choose operations, modify
+  the subject, execute work, or close an attempt.
 
-## Produce the Account
+## Procedure
 
-Choose the observation lenses needed to understand the bounded subject. Search,
-inspect, compare, or derive views as the subject requires. For each new or
-changed item, state its lens, epistemic kind, current state, minimum supported
-claim, evidence, route, and reason for the change. Name only predecessors that
-changed or retired; do not reproduce retained items or derived indexes.
+Choose one useful lens, search or inspect the subject, and merge its sourced
+semantic delta before choosing another lens. After each merge, reassess which
+remaining angle could still change a candidate, boundary, conflict, gap, or
+material unknown. Estimate completeness as a claim limit, not a certainty
+threshold.
 
-The stable output contains the full Account, an index from every declared lens
-to its items, the aggregate opening status, and the current Goal candidates.
-It contains only the current result, not the discarded exploration used to
-form it.
-
-## Materialize
+For every new or changed item, provide the minimum supported claim, lens,
+epistemic kind, state, evidence, route, and reason. On iteration name only
+changed or retired predecessors; the Tool retains everything else.
 
 Run `scripts/materialize --help`, supply temporary semantic JSON, and bind
 either no predecessor or one exact Observe/Finish Account. The deterministic
-Tool preflights the complete semantic delta and creates the full stable output.
-Do not supply generated Account fields or hand-author or patch stable JSON.
+Tool preflights the semantic delta and creates the full Account. Exact fields
+belong to public help; ordinary use does not require reading CUE or Tool source.
 
-Ordinary use does not require reading the CUE contract or Tool source. If the
-Tool refuses input, correct the reported public field or relation; do not
-bypass the contract.
+## Disposition
+
+Commit one full Account containing the current items, lens index, aggregate
+opening status, and exposed Goal candidates. It records the current result, not
+discarded exploration, and proves only what its cited sources support.
+
+Gaps and unknowns remain valid Account results. Goal may consume the Account;
+it cannot treat an opportunity as already selected. Do not supply generated
+Account fields or hand-author, patch, or bypass stable JSON. A refusal leaves no
+new Account and must identify the unresolved public input or relation.

@@ -1,53 +1,62 @@
 ---
 name: k4-run
-description: Execute one exact selected Plan to plan-complete or confirmed abort by recording operation, patch, abort, and terminal facts in a chained ledger. Use after k4-plan; do not replan or perform Finish.
+description: Execute one exact selected Plan to its terminal topology while preserving actual operation, patch, abort, and halt facts in a chained ledger. Use after k4-plan; local results choose routes but do not decide whole-Goal acceptance or perform Finish.
 ---
 
 # K4 Run
 
-Perform the selected Plan and preserve what actually happens.
+Turn the Plan's licensed possibilities into an immutable history of what
+actually happened.
 
-## Boundary
+## Mandate
 
-- Require one exact frozen Goal and its exact executable Plan; otherwise return
-  to the earliest missing predecessor without starting Run.
-- The frozen graph is the scheduling authority. Execute every activated
-  normal operation once, record `pass` or `fail`, and follow only its frozen
-  result edge. Forks activate all branches; joins wait for their dependencies.
-- Search, inspect, and choose implementation details as needed for the active
-  operation within the Goal's authority. Findings and unknowns may be recorded
-  on either result and do not change routing.
-- If a significant Plan omission prevents the active operation, one emergency
-  patch attempt is allowed for that operation. Record its script, exact
-  tools, permissions, positions, resources, effects, application result,
-  Finding, and unknowns. Every boundary remains inside the Goal envelope. Do
-  not add a separate systematic test for the patch; retry the original
-  operation and let that operation produce the pass/fail result.
-- Record `abort-confirmed` only from an explicit external or recoverable
-  runtime fact while the normal route is still open. Then follow exactly the
-  Plan-level `on_abort` response: preserve only, or execute its separate route.
-  Run does not choose or patch that response.
-- Halt as `plan-complete` when every activated normal branch reaches end,
-  including routes selected by failed operations. Halt as `abort` only after
-  abort confirmation and completion of the declared response. An unfinished
-  ledger is neither terminal state.
-- Never edit an event. A projection is reconstructible state, not history.
-- Do not change the Goal or Plan, judge final Goal acceptance, adopt output, or
-  choose a next Goal.
+Run alone performs the operations activated by one exact Plan and records their
+actual consequences. It may test enough to choose the operation's frozen
+`pass` or `fail` edge. It does not decide whether the Goal, product, or whole
+attempt passed; that responsibility belongs to Finish.
 
-## Stable events
+## Policy
 
-Append an immutable event after each operation, emergency patch, or abort
-confirmation. When Run
-stops, append the actual halt. The ledger is the complete linear source for
-Finish; the projection is only its current derived view.
+- Require one exact frozen Goal and its executable Plan. Without both, return a
+  named missing-predecessor refusal and do not start a ledger.
+- Use the frozen graph as scheduling authority. Execute each activated real
+  operation once, record its local `pass` or `fail`, and follow only the
+  corresponding edge. Forks activate branches and joins await dependencies.
+- Reason, inspect, search, test, compare, and choose implementation details as
+  needed for the active operation inside its envelope. Developer tests support
+  routing; they are not whole-attempt acceptance.
+- Record findings, unknowns, and recommendations without amending Observe,
+  Goal, or Plan. Thinking about another responsibility is allowed; exercising
+  that responsibility is not.
+- If a significant Plan omission blocks the active operation, allow at most
+  one emergency patch attempt under the frozen Goal and patch policy. Record
+  its script, boundaries, effects, result, findings, and unknowns. Do not add a
+  systematic validation objective for the patch; retry the original operation
+  and let that operation select its route.
+- Confirm abort only from an explicit external or runtime fact while the normal
+  route remains open, then follow the Plan's frozen abort policy. Abort is not
+  an operation result and Run does not invent its response.
+- Do not replan, judge Goal acceptance, clean or package the whole attempt,
+  adopt or publish results, or select the next Goal.
 
-## Append and project
+## Procedure
 
-Run `scripts/append --help` for the public event contract. Append through the
-script with exact Goal and Plan bindings. Use `scripts/project` to create an
-absent derived view from the complete ledger. Use `scripts/validate` to check
-the ledger or compare a projection with its exact source ledger.
+Take the next activated operation, work within its exact boundary, perform the
+checks needed for its route, append the result, and follow the selected edge.
+Repeat until all activated normal branches reach end or the declared abort
+response is complete. Halt as `plan-complete` even when a fail edge was taken;
+that status means topology completion only. Run `scripts/append --help` for
+the event interface, append with exact Goal and Plan bindings, and use
+`scripts/project` and `scripts/validate` only for derived state and ledger
+consistency.
+
+## Disposition
+
+The stable result is the immutable linear ledger plus its halt fact. Append an
+event after each operation, emergency patch, or abort confirmation; never edit
+an event. A projection is reconstructible state, not history. The ledger tells
+Finish what ran and what happened. It never turns route completion or a local
+operation result into final acceptance.
 
 Do not hand-author, patch, reorder, truncate, or replace stable events.
 Ordinary use does not require reading the CUE contract or Tool source. Correct

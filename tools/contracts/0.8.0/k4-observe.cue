@@ -65,15 +65,9 @@ context: _
 	reason:           #Text
 	evidence_refs:    #NonEmptyStrings
 })
-#DeltaInput: close({summary: #Text})
 #Delta: close({
 	summary:       #Text
 	evidence_refs: #NonEmptyStrings
-})
-#Completeness: close({
-	estimate:         number & >=0 & <=1
-	claim_limit:      #Text
-	remaining_angles: #Strings
 })
 #Account: close({
 	revision:    uint
@@ -90,10 +84,6 @@ context: _
 #Observation: close({
 	mode: "bootstrap" | "iterate"
 	goal_candidate_ids: [...#ItemID] & list.UniqueItems()
-	gap_ids: [...#ItemID] & list.UniqueItems()
-	conflict_ids: [...#ItemID] & list.UniqueItems()
-	unknown_ids: [...#ItemID] & list.UniqueItems()
-	completeness: #Completeness
 	status: "aligned" | "open"
 })
 #Document: close({
@@ -101,14 +91,14 @@ context: _
 	observation: #Observation
 })
 #Envelope: close({
-	schema:            "k4-observe-document/v3"
+	schema:            "k4-observe-document/v2"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({previous_account: null | #Binding})
 	document: #Document
 })
 #PreviousEnvelope: {
-	schema:            "k4-observe-document/v2" | "k4-observe-document/v3" | "k4-finish-document/v2" | "k4-finish-document/v3" | "k4-finish-document/v4" | "k4-finish-document/v5"
+	schema:            "k4-observe-document/v2" | "k4-finish-document/v2" | "k4-finish-document/v3" | "k4-finish-document/v4"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -125,14 +115,12 @@ context: _
 	subject:  #Text
 	boundary: #Text
 	cutoff:   #Text
-	delta:    #DeltaInput
-	completeness: #Completeness
+	delta:    #Delta
 	additions: [#Addition, ...#Addition]
 })
 #IterationInput: close({
 	cutoff: #Text
-	delta:  #DeltaInput
-	completeness: #Completeness
+	delta:  #Delta
 	updates: *[] | [...#Update]
 	additions: *[] | [...#Addition]
 	retirements: *[] | [...#Retired]
@@ -145,8 +133,7 @@ _mode:     "bootstrap" | "iterate"
 _subject:  #Text
 _boundary: #Text
 _cutoff:   #Text
-_deltaInput: #DeltaInput
-_completeness: #Completeness
+_delta:    #Delta
 _updates: [...#Update]
 _additions: [...#Addition]
 _retirements: [...#Retired]
@@ -160,8 +147,7 @@ if _previous.value == null {
 	_subject:  _input.subject
 	_boundary: _input.boundary
 	_cutoff:   _input.cutoff
-	_deltaInput:    _input.delta
-	_completeness: _input.completeness
+	_delta:    _input.delta
 	_updates: []
 	_additions: _input.additions
 	_retirements: []
@@ -176,8 +162,7 @@ if _previous.value != null {
 	_subject:        _previous.value.document.account.subject
 	_boundary:       _previous.value.document.account.boundary
 	_cutoff:         _input.cutoff
-	_deltaInput:          _input.delta
-	_completeness:       _input.completeness
+	_delta:          _input.delta
 	_updates:        _input.updates
 	_additions:      _input.additions
 	_retirements:    _input.retirements
@@ -254,17 +239,16 @@ _addedItems: [for addition in _additions {
 }]
 _generatedItems: list.Concat([_continuedItems, _addedItems])
 _itemIDs: [for item in _generatedItems {item.item_id}]
+_allEvidenceRaw: list.Concat(list.Concat([
+	[for item in _generatedItems {item.evidence_refs}],
+	[for item in _retirements {item.evidence_refs}],
+	[_delta.evidence_refs],
+]))
+_sourceRefs: [for index, ref in _allEvidenceRaw if len([for priorIndex, priorRef in _allEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 _semanticChangeEvidence: list.Concat(list.Concat([
 	[for item in _generatedItems if item.change != "retained" {item.evidence_refs}],
 	[for item in _retirements {item.evidence_refs}],
 ]))
-_deltaEvidence: [for index, ref in _semanticChangeEvidence if len([for priorIndex, priorRef in _semanticChangeEvidence if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
-_delta: #Delta & {summary: _deltaInput.summary, evidence_refs: _deltaEvidence}
-_allEvidenceRaw: list.Concat(list.Concat([
-	[for item in _generatedItems {item.evidence_refs}],
-	[for item in _retirements {item.evidence_refs}],
-]))
-_sourceRefs: [for index, ref in _allEvidenceRaw if len([for priorIndex, priorRef in _allEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 _lensNamesRaw: list.Concat([
 	[for lensName in _previousLenses if len([for item in _generatedItems if item.lens == lensName {item}]) > 0 {lensName}],
 	[for item in _generatedItems {item.lens}],
@@ -281,7 +265,16 @@ _generateChecks: {
 	for item in _generatedItems {
 		if item.route == "external" && item.route_ref == null {_invalid: error("item.route_ref: required when route is external")}
 		if item.route != "external" && item.route_ref != null {_invalid: error("item.route_ref: must be omitted unless route is external")}
+		if item.change != "retained" && len([for ref in item.evidence_refs if list.Contains(_delta.evidence_refs, ref) {ref}]) == 0 {_invalid: error("delta.evidence_refs: every added or changed item must cite at least one delta evidence reference")}
 		if item.change == "changed" && item.item_id == item.previous_item_id {_invalid: error("updates: new semantic item must differ from its predecessor")}
+	}
+	for retired in _retirements {
+		for ref in retired.evidence_refs {
+			if !list.Contains(_delta.evidence_refs, ref) {_invalid: error("retirements.evidence_refs: every retirement evidence reference must occur in delta.evidence_refs")}
+		}
+	}
+	for ref in _delta.evidence_refs {
+		if !list.Contains(_semanticChangeEvidence, ref) {_invalid: error("delta.evidence_refs: every reference must support an update, addition, or retirement")}
 	}
 	if _previous.value == null {
 		if len(_additions) == 0 {_invalid: error("additions: bootstrap requires at least one observed item")}
@@ -295,9 +288,6 @@ _generateChecks: {
 }
 
 _goalCandidates: [for item in _generatedItems if item.route == "goal-candidate" {item.item_id}]
-_gapIDs: [for item in _generatedItems if item.state == "gap" {item.item_id}]
-_conflictIDs: [for item in _generatedItems if item.state == "conflict" {item.item_id}]
-_unknownIDs: [for item in _generatedItems if item.state == "unknown" {item.item_id}]
 _lensIndex: [for lensName in _lenses {close({
 	lens: lensName
 	item_ids: [for item in _generatedItems if item.lens == lensName {item.item_id}]
@@ -323,15 +313,11 @@ _document: #Document & {
 	observation: {
 		mode:               _mode
 		goal_candidate_ids: _goalCandidates
-		gap_ids:            _gapIDs
-		conflict_ids:       _conflictIDs
-		unknown_ids:        _unknownIDs
-		completeness:       _completeness
 		status:             _status
 	}
 }
 generate: _generateChecks & close({
-	schema:   "k4-observe-document/v3"
+	schema:   "k4-observe-document/v2"
 	bindings: _bindings
 	document: _document
 })

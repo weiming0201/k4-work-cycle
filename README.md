@@ -30,6 +30,7 @@ tools/stable-result
 tools/migrate-0.4.1-to-0.5.0
 tools/migrate-0.5.0-to-0.6.0
 tools/contracts/0.5.0/
+tools/contracts/0.8.0/
 skills/
   k4-observe/{SKILL.md,assets/,references/,scripts/}
   k4-goal/{SKILL.md,assets/,references/,scripts/}
@@ -51,10 +52,11 @@ Skill-local scripts are the public entrypoints. Observe, Goal, Plan, and Finish
 materialize immutable documents. Run appends one event, projects its ledger,
 and validates either the ledger or its derived projection. Every stable JSON or
 JSONL output is Tool-generated; semantic input remains a temporary work product.
-The minimized Observe-iteration and Finish-settlement interfaces accept changed,
+The Observe-iteration and Finish-settlement interfaces accept changed,
 added, and retired Account semantics without requiring the complete Account.
-Goal sources and empty collections, Plan graph projections, Run fixed/ledger
-fields, and both complete Accounts are Tool-derived rather than caller-maintained.
+Goal sources, Plan graph projections, Run eligibility and Plan-local judgment
+contracts, Finish judge/comparison contracts, source closures, and both complete
+Accounts are Tool-derived rather than caller-maintained.
 
 Finish checks update identities, update-retirement collisions, and item routing
 before projecting the closing Account; a closing item cannot retain
@@ -62,8 +64,17 @@ before projecting the closing Account; a closing item cannot retain
 bound Goal has none. Run generates fixed patch metadata, but an emergency patch
 must still supply at least one actual Finding.
 
-Release `0.8.0` minimizes caller input while preserving stable output schemas
-and stage meanings. Former full inputs remain accepted when consistent.
+Release `0.9.0` changes the public stable chain to Observe v3, Goal v7, Plan v8,
+Run event/projection v7, and Finish v5. It adds Observe completeness/indexes,
+Goal decision/feasibility surfaces, per-operation Plan audit and recovery,
+Run-local judgment without whole-Goal conclusion, and Finish closure work,
+attribution, residual effects and split source closures. Caller-maintained
+derived fields are rejected. The prior contracts remain frozen under
+`tools/contracts/0.8.0/`; existing chains remain valid but are not silently
+reinterpreted as v0.9.0 chains.
+
+Release `0.8.0` minimized temporary caller input while preserving its stable
+output schemas and stage meanings.
 
 Release `0.7.0` replaces Observe's full-Account temporary input with a
 delta-only interface. The stable Observe schema remains v2; existing Account

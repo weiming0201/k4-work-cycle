@@ -6,10 +6,25 @@ with supporting and counter references, operations, blockers, and unknowns.
 
 Each stable operation belongs to the Tool-derived normal or abort phase and carries Tool-derived join dependencies, Goal point and control
 identities served, one Goal-authorized tool, executor, complete read/write
-positions, permission and resource references, maximum effects, checks,
-idempotency, retry ceiling, recovery, and exactly two result edges: `pass` and
-`fail`. Each edge records its later successor operations and why. The two edges
-may have the same successors. An empty successor list reaches the virtual end.
+positions, permission and resource references, maximum effects, structured
+preconditions, one complete local judgment contract, idempotency, retry ceiling,
+structured failure handling, and exactly two result edges: `pass` and `fail`.
+Each edge records its later successor operations and why. The two edges may have
+the same successors. An empty successor list reaches the virtual end.
+
+A precondition states what must hold, its check entry, and expected state. The
+local judgment fixes the operation subject, starting baselines, required actual
+outputs and evidence, positive and negative criteria, check entry, judge, and
+claim limit. It decides only which operation edge Run follows. Both pass and
+fail therefore have positive replay criteria; fail is not an unexamined
+catch-all. An independent local judge cannot be the responsible executor.
+
+Failure handling is `none`, `restore`, `compensate`, or `preserve-stop`.
+Operations with a possible write or effect cannot use `none`. Restore and
+compensate name a stable target, an available Goal Tool, and a check;
+preserve-stop names what remains stable and how that state is checked without
+inventing a corrective action. Empty operation envelope collections are
+canonical and may be omitted from temporary input.
 
 The contract generates normal entries and phases, join dependencies, operation
 identities, Goal coverage, and a topology projection. Entry operations are the virtual start projection. Multiple

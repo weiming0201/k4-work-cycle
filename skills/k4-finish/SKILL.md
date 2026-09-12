@@ -1,48 +1,64 @@
 ---
 name: k4-finish
-description: Settle one halted Run ledger into the shared Account and a bounded completion report. Use after k4-run; do not repair the attempt, alter its Goal or Plan, adopt or publish results, select the next Goal, or claim independent audit.
+description: Close one halted Run by performing authorized final verification and closure, judging the frozen Goal, and settling actual effects into the shared Account and completion report. Use after k4-run; do not repair product semantics, rewrite history, replan, adopt, publish, or select the next Goal.
 ---
 
 # K4 Finish
 
-Close one bounded attempt by posting its actual Run ledger to the same general
-ledger that Observe opened.
+Turn one bounded dynamic attempt back into a clean, judged, and recoverable
+static state.
 
-## Boundary
+## Mandate
 
-- Bind the exact opening Account, Goal, Plan, and halted Run ledger. Its current
-  projection is derived mechanically; follow recorded evidence references only
-  when the settlement needs more detail.
-- Preserve the Account subject, boundary, and observation lenses. Account for
-  every predecessor item as retained, changed, or retired; new facts may be
-  added only inside an already declared lens.
-- Judge every Goal acceptance point and terminal control from bounded evidence,
-  recording the exact judge identity frozen by Goal. A completed Plan route
-  does not by itself prove that the Goal passed.
-- Aggregate actual and not-run operations, pass/fail results, Findings,
-  unknowns, emergency patches, halt, the actual Plan-owned abort response,
-  residual-effect evidence, result disposition, and incomplete work.
-- Do not repair, replan, append Run events, adopt or publish a result, or expose
-  the next Goal. The next Observe decides how the settled Account changes the
-  opportunity inventory.
+Finish alone performs the Goal-authorized closure of one halted Run: final
+verification, acceptance judgment, deterministic projection regeneration,
+cleanup, resource release, authorized rollback or compensation, local
+packaging, whole-attempt reporting, and settlement into the Account. The Run
+ledger remains the authority for process history.
 
-## Produce the settlement
+## Policy
 
-Form the current Account from the opening Account and the actual attempt delta.
-Then provide one pass/fail judgment for every acceptance point and terminal
-control. Unknowns remain explicit annotations and do not become a third result.
+- Bind the exact opening Account, Goal, Plan, and halted Run ledger. Follow the
+  ledger's evidence references when closure needs more detail; never rewrite
+  its events.
+- Perform only closure actions already authorized by Goal. Final tests,
+  deterministic metadata or Manifest regeneration, cleanup, resource release,
+  rollback, compensation, and local packaging are valid here when frozen in
+  that authority. Product behavior repair and replanning are not.
+- Reason, inspect, search, test, and compare as needed for closure. Record the
+  exact Goal-declared judge for each acceptance point; this responsibility is
+  not automatically an independent audit.
+- Judge every acceptance point and terminal control from bounded evidence. A
+  completed route or successful local Run check does not by itself prove Goal
+  acceptance.
+- Preserve the Account's subject, boundary, and lenses. Settle every predecessor
+  item as retained, changed, or retired, and add new facts only inside a
+  declared lens.
+- Attribute deviations only as far as evidence supports: execution to Run,
+  transition design to Plan, target or audit model to Goal, and factual
+  baseline to Observe. Attribution is judgment, not repair authority.
+- Do not append Run events, alter Goal or Plan, adopt or publish results, or
+  select the next Goal.
 
-The deterministic output derives the operation summary, Run Findings and
-unknowns, halt, attempt result, ledger head, and lens index. The closing report
-and updated Account are two projections of one settlement, not independent
-stores.
+## Procedure
 
-## Materialize
+Read the complete ledger and current result surface, execute authorized closure
+work, then judge the Goal and account for direct and derivative effects.
+Aggregate actual and not-run operations, local results, findings, unknowns,
+emergency patches, halt, abort response, residual effects, disposition, and
+incomplete work. Run `scripts/materialize --help`, supply the semantic
+settlement, and bind the exact Account, Goal, Plan, and ledger. The Tool derives
+the operation summary, ledger head, attempt result, lens index, and stable
+document structure.
 
-Run `scripts/materialize --help`, supply temporary semantic JSON, and bind the
-exact opening Account, Goal, Plan, and halted Run ledger. The deterministic
-Tool creates the stable Finish output. Do not hand-author or patch stable JSON.
+## Disposition
 
-Ordinary use does not require reading the CUE contract or Tool source. If the
-Tool refuses input, correct the reported public field or relation; do not
-bypass the contract.
+The stable result is one completion report and one updated Account as two
+projections of the same settlement. A non-passing attempt may still close
+cleanly and remain recoverable; a passing attempt is only a locally accepted
+package until separate authority adopts or publishes it. The next Observe may
+consume the settled Account. Finish does not expose or select that next Goal.
+
+Do not hand-author or patch stable JSON. Ordinary use does not require reading
+the CUE contract or Tool source. If the Tool refuses input, correct the
+reported public field or relation; do not bypass the contract.

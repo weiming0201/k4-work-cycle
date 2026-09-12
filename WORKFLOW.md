@@ -53,7 +53,13 @@ observed subject, or close an attempt.
 ## 2. Goal: freeze the selected mandate
 
 Goal binds one exact Observe Account and selects only explicit Goal candidates
-from it. It freezes the baseline, target, evidence cutoff, scope, acceptance
+from it. It distinguishes the selected candidate from supporting Account items,
+states the expected benefit, cost, downside, reversibility, information value,
+confidence and evidence basis, and freezes the primary change surface and its
+open, bounded, frozen and derivative boundaries. Before freezing, it records a
+seven-part boundary-feasibility review covering subject, Account sufficiency,
+change surface, execution envelope, downside, terminal observability and failure
+stop. It also freezes the baseline, target, evidence cutoff, scope, acceptance
 points, bounded judges, available tools, authority, resources, budget, maximum
 effects, and execution controls for one attempt. The execution envelope names
 the exact available tools, permissions, readable and writable positions,
@@ -88,7 +94,8 @@ Each stable real operation contains:
 - the Goal points and controls it serves;
 - its tool, responsible executor, readable and writable positions;
 - permissions, resources, and maximum side effects;
-- pre-checks, post-checks, idempotency, retry ceiling, and recovery;
+- structured preconditions, a complete local pass/fail judgment contract,
+  idempotency, retry ceiling, and structured failure handling;
 - exactly two result edges, `pass` and `fail`.
 
 The caller selects operation content and the two result edges. The Tool derives
@@ -118,8 +125,10 @@ actual results. Findings and unknowns do not create new graph branches.
 ## 4. Run: append the actual journal
 
 Run binds one exact Goal and Plan. It starts from the Plan entry, executes each
-activated operation once, records `pass` or `fail`, and follows only the frozen
-edge for that result. Forks activate every successor. Joins become eligible
+activated operation once, records a local `pass` or `fail` against the exact
+Plan-owned local judgment contract, and follows only the frozen edge for that
+result. Eligibility evidence and the local judgment contract are projected by
+the Tool rather than copied by the caller. Forks activate every successor. Joins become eligible
 only after all declared predecessors have responses. Unselected operations
 remain truthfully `not-run` in the derived projection.
 
@@ -163,15 +172,16 @@ Tool derives its current projection from those exact bytes. Finish may follow re
 references when settlement needs detail, but it does not repair the attempt or
 invent missing events.
 
-For minimized calls, Finish accepts the closing semantic delta, actual terminal
-judgments, result disposition, and failure-only incomplete content; compatible
-full inputs remain valid when they agree with the same derivation. It performs
+Finish accepts only the closing semantic delta, actual terminal judgments,
+authorized closure actions, attribution, residual effects, result disposition,
+and failure-only incomplete content. It performs
 two inseparable projections of one settlement:
 
 1. it updates the same full Account opened by Observe, preserving subject,
    boundary, and lenses while mechanically carrying every unmentioned
    predecessor item forward;
-2. it produces a completion report containing Goal judgments, actual and
+2. it produces a completion report containing Goal-owned judge and comparison
+   contracts, actual closure work, attribution, residual effects, actual and
    not-run operations, operation pass/fail counts, Findings, unknowns,
    emergency patches, halt, result placement, and incomplete work.
 
@@ -183,7 +193,9 @@ next Observe. Omitted terminal-control results become `[]` only when the bound
 Goal has no terminal controls; otherwise actual judgments remain required.
 
 Every Goal acceptance point and terminal control receives a binary judgment
-from the exact judge identity frozen by Goal. Unknowns remain attached
+under the exact judge and comparison contract frozen by Goal. Account item and
+retirement evidence form the Account source closure; judgment, Run and closure
+evidence form a separate closure source closure. Unknowns remain attached
 annotations. An attempt passes only when Run reaches
 `plan-complete` and all acceptance, terminal-control, and invariant-control
 judgments pass. `abort` always settles the attempt as failed and retains the
@@ -191,8 +203,10 @@ abort source, evidence, frozen response mode, response-operation counts, and
 residual effect references. A failed operation may therefore be recovered by its frozen
 fail route; operation failure alone does not decide the Goal.
 
-Finish does not modify Goal or Plan, append Run events, repair, adopt, publish,
-or select a future Goal. The next Observe decides how the settled Account
+Finish does not modify Goal or Plan, append Run events, repair product semantics,
+adopt, publish, or select a future Goal. Its permitted closure work is limited
+to authorized verification, cleanup, release, rollback, compensation and
+packaging. The next Observe decides how the settled Account
 changes the opportunity inventory.
 
 ## 6. Stable boundaries

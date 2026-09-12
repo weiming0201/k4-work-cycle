@@ -17,18 +17,20 @@ HELP = """Usage: append --input FILE --log FILE --bind goal=FILE --bind plan=FIL
 Append one immutable Run event from temporary semantic JSON.
 
 Event input:
-  operation-result: {kind, operation_id, result, eligibility_refs,
-    actual_output_refs, evidence_refs, trace_refs, invariant_checks,
+  operation-result: {kind, operation_id, local_result,
+    actual_output_refs?, evidence_refs, trace_refs, control_observations?,
     findings?, unknowns?}
   emergency-patch: {kind, operation_id, application_result, reason, script_ref,
     tool_refs, permission_refs, read_refs?, write_refs, resource_refs,
-    maximum_side_effects, actual_side_effect_refs, trace_refs, findings, unknowns?}
+    maximum_side_effects, actual_side_effect_refs, evidence_refs, trace_refs,
+    findings, unknowns?}
   abort-confirmed: {kind, source_ref, reason, evidence_refs}
   halt: {kind, budget_evidence_refs?, side_effect_evidence_refs?, evidence_refs,
     resume_ref?}
 
-The Tool fixes patch attempt and verification scope, derives abort/halt position
-and halt trigger from the ledger, and supplies canonical empty annotations.
+The Tool derives operation eligibility and the Plan-local judgment contract,
+fixes patch attempt and verification scope, derives abort/halt position and halt
+trigger from the ledger, and supplies canonical empty annotations.
 Actual execution facts, evidence, Findings, unknowns, effects, and resume facts
 remain semantic input. Explicit compatibility values must equal derived values.
 
@@ -73,13 +75,15 @@ def normalize(value: object, events: list[dict]) -> dict:
     aborted = any(entry.get("event", {}).get("kind") == "abort-confirmed" for entry in events)
 
     if kind == "operation-result":
-        for field in ("actual_output_refs", "evidence_refs", "invariant_checks", "findings", "unknowns"):
+        for field in ("actual_output_refs", "control_observations", "findings", "unknowns"):
             value.setdefault(field, [])
     elif kind == "emergency-patch":
         value.setdefault("attempt", 1)
         value.setdefault("verification_scope", "mainline-resumption-only")
         if not isinstance(value.get("findings"), list) or not value["findings"]:
             raise ValueError("input.findings: emergency-patch requires at least one actual Finding")
+        if not isinstance(value.get("evidence_refs"), list) or not value["evidence_refs"]:
+            raise ValueError("input.evidence_refs: emergency-patch requires actual evidence")
         for field in ("read_refs", "unknowns"):
             value.setdefault(field, [])
     elif kind == "abort-confirmed":

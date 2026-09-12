@@ -1,14 +1,18 @@
 {
   "bindings": {},
-  "content_sha256": "d5f03a2e8b3d27ec0845d67fbba406ae6b3fb03fea1f6b64f77e83734c9319ba",
+  "content_sha256": "60a23dec5198450d5df3e2cd3147fede9e9a6a28529454932695245f9e9a3552",
   "document": {
     "cue_version": "v0.17.1",
     "extension_id": "k4-work-cycle",
-    "extension_version": "0.8.0",
+    "extension_version": "0.9.0",
     "files": [
       {
         "path": ".gitignore",
         "sha256": "ba73a5ee93babd3dd63ca0968442c941ff4fa633fb26b55acfe0d03849af90a6"
+      },
+      {
+        "path": ".k4/findings/2026-09-12-control-theory-reverse-audit.md",
+        "sha256": "fcb3877fec5a3d21921f77459ba9d296124d8a69c8a842f2d516a2023a58b500"
       },
       {
         "path": ".k4/resource.json",
@@ -16,19 +20,19 @@
       },
       {
         "path": "DESIGN.md",
-        "sha256": "df19379415de45869db8c24dbf140d54581af60bd3bbe7d1cf731dd05eefc38e"
+        "sha256": "792fece772da029e7030960887465c0b9fed138da3b4292e3cf8a6faecc78713"
       },
       {
         "path": "MIGRATION.md",
-        "sha256": "ce1620632a0c49bf28fa60f4c8cba9e2d2bc4d2804a9928dcedaebd3d3ffe6c8"
+        "sha256": "00680c803512e4fbd15c94a1a3c8609e532d5883c21343d40f6361dbe5c07f91"
       },
       {
         "path": "README.md",
-        "sha256": "79c53470f18e2e3818aba05447c7e0056280e70019a652cd8261b74204a35f45"
+        "sha256": "514821a2ab7cf2449ff7b24206df2aa4632145100fc117a1b01f1800fbeacf0c"
       },
       {
         "path": "WORKFLOW.md",
-        "sha256": "645da136a99ff386463d18ff7e78d09fe5f70e41c8291c430a133cf8cdc544ed"
+        "sha256": "aef325669f14156e79a2947f177e115fa6a1fd4f659fbdd861c6be8f512ed07a"
       },
       {
         "path": "manifest.cue",
@@ -36,83 +40,83 @@
       },
       {
         "path": "skills/k4-finish/SKILL.md",
-        "sha256": "e2118507328edfeba6871384f344f735caf250aa40d3235d84fba1c875b51f9c"
+        "sha256": "a314955d2111e1494be9c669fdb16e373bc7886483f9896cdea924cb7bceeaf4"
       },
       {
         "path": "skills/k4-finish/assets/protocol.cue",
-        "sha256": "d9db90bc0b136fd955d33b2198e6029d7a7029d8b02114a1041528bedd907438"
+        "sha256": "39d570f2e498e5205261ec8384ec3679a361e45bccadbc59bb1885a108b90145"
       },
       {
         "path": "skills/k4-finish/references/protocol.md",
-        "sha256": "40cf30ffa8c45295b6e6338d632ec668bfa6f609796555bad8f0954c678827e6"
+        "sha256": "51d3b81c3917adbc2f934f3869bb995afe3d10933096ade43245dd4ddd48d4c8"
       },
       {
         "path": "skills/k4-finish/scripts/materialize",
-        "sha256": "7693676ee1bc4df587c949f7672a55bd308662238a3cfcd70f35ac33e1540706"
+        "sha256": "83a11c91e5a4d60ac971f001c54c4e07bb63ed7d96ce0ee22f39eefa7e1d7746"
       },
       {
         "path": "skills/k4-goal/SKILL.md",
-        "sha256": "b6174fb9a26342b42d301cdfe1b1d7ccc04a897e4ae537eb8c6d01fc7b17fd3c"
+        "sha256": "d671fe434cd476fa643559705a78c68230c4c538b8c6918c5f6d00e4340d1c75"
       },
       {
         "path": "skills/k4-goal/assets/protocol.cue",
-        "sha256": "d86f577bbf577e38600f3b1ee3ec710417e866ba2c0fccbadee7c5042b9f288c"
+        "sha256": "d6f65f934b44799a6538e80c0bf89487ca4edd8019353c4bef63e411869f402d"
       },
       {
         "path": "skills/k4-goal/references/protocol.md",
-        "sha256": "81f95b6f60c3877d1d566412c469933a13a816fe32f61a260042b7ba70805327"
+        "sha256": "62830866cf973cb39f07beb62519359568bce96228b5cf559dba4daf403b4d86"
       },
       {
         "path": "skills/k4-goal/scripts/materialize",
-        "sha256": "cc353df083ec22d87be2047315028f5c169fdcb539164dde65834f1b0cb9d82e"
+        "sha256": "98768bd8f681f66a203b224c019954853ca9c32cda03eea050cce1dc19b0b4df"
       },
       {
         "path": "skills/k4-observe/SKILL.md",
-        "sha256": "76a9a62914a4f9ff63ba0b7cca8ea9617396a92b02cb50de69ac93c463c9796f"
+        "sha256": "29d438b97d0318c05bb23553136905ec2d3753d96ea39a433caba020145b5b3b"
       },
       {
         "path": "skills/k4-observe/assets/protocol.cue",
-        "sha256": "f015a764b9d1b2f0a36d788e00e08461508758da885e305d1a4d2b9f40718bd1"
+        "sha256": "c5cdcfcbcc5c325a88fdd9736e4058e0f93bda1921ff1831f88e1320b011964f"
       },
       {
         "path": "skills/k4-observe/references/protocol.md",
-        "sha256": "6c8d79f4f29451ec569619db069b2087c2cb74d560cc059be091fb4c38e50895"
+        "sha256": "59936cc2d0bf0b117c3cbb4390f56493b34b38425ef1b30d612646931bf5fa2f"
       },
       {
         "path": "skills/k4-observe/scripts/materialize",
-        "sha256": "1c371b4d932d26ba72aab9f38ebef2766acca96554c955afbc3f1a773042f771"
+        "sha256": "2a1a84574aab1632943e7e323d6419c34a2a41b2e964dba2a86ee5fbeaf17c75"
       },
       {
         "path": "skills/k4-plan/SKILL.md",
-        "sha256": "cb589a069b95f21e076bb6ca8749cad658f9e2cddcffa5d59154c3c08f6e2fed"
+        "sha256": "7bad57aad6786856dcef402453c5c356e98ea5e309dc2188be98a8c422f4ed16"
       },
       {
         "path": "skills/k4-plan/assets/protocol.cue",
-        "sha256": "d913c381f2e28ad3a770c8f14bb1d482aaaa5d03f86025bcee1bb7ec3673be39"
+        "sha256": "b8149e722b67e7fbeb7b1bd80d6651f957dfa7adde178ddc98fb91fbf19e04ee"
       },
       {
         "path": "skills/k4-plan/references/protocol.md",
-        "sha256": "952890ef1da1576de4cceb417deda1c2d4cd664fd3c71671b8ca2cef86888f39"
+        "sha256": "e47f98d65fc665c60dc29242930f10bd2b9623932a6465f32af0b1c58848f50f"
       },
       {
         "path": "skills/k4-plan/scripts/materialize",
-        "sha256": "ffca0e3f8199097072fb4cb36409c29d0165f886492329ad0373c731ec08680b"
+        "sha256": "c3a07d46005a0a7a3054d81852509aaebe7a6b68cf9d29241d6eae5993671855"
       },
       {
         "path": "skills/k4-run/SKILL.md",
-        "sha256": "d76442111c014259afc64d798ea02498dcd95b7ac704e269345b7b741a6352ab"
+        "sha256": "524009a7c3a79181edddd3d497c08b7a32ee392cea68361421e306253677ef64"
       },
       {
         "path": "skills/k4-run/assets/protocol.cue",
-        "sha256": "c23deac21c4b55a75ccecbce67f1e6b49745cd828c3d6223c3a709acbc4cb91c"
+        "sha256": "ce1b7fe137c1802aa50b140dc7af8e414dba379da315f629ecc85bf07dc15416"
       },
       {
         "path": "skills/k4-run/references/protocol.md",
-        "sha256": "326d413423fc0fac3fe8f9af5c5289205f4f00a3ffec83cade5a2ffd1826a4cc"
+        "sha256": "e598ad45a5f8b057d5cb2ebea0096939898f3b0329c640f06ec854b9ec48ea01"
       },
       {
         "path": "skills/k4-run/scripts/append",
-        "sha256": "0e6eef9f02e5a43ededc4fcdc0b522679a5b66677fdb1d255d278e5e803bed6a"
+        "sha256": "692f8a85e5cde097b90689b9f141da3008d527273b29b5e173617a85e357f46f"
       },
       {
         "path": "skills/k4-run/scripts/project",
@@ -124,7 +128,7 @@
       },
       {
         "path": "tests/conformance.py",
-        "sha256": "617cd23d10323fa100bdf0ae536ef48c083e625a2e41e095bae24e9dcc5bb8fc"
+        "sha256": "7794752075e537fa31685b938676d7f6f3ef0d15d9e8d873d6f49e29024152f1"
       },
       {
         "path": "tests/fixtures/0.4.1/finish.json",
@@ -176,7 +180,7 @@
       },
       {
         "path": "tests/input_minimality_oracle.py",
-        "sha256": "32930706a79135fa6a1170078e561d30b38bd097624787217be1276784fbec8a"
+        "sha256": "47e292cbda9f9047b2c71cc13d59416741e11194bc86bec2293611b081e81ab7"
       },
       {
         "path": "tools/contracts/0.5.0/k4-finish.cue",
@@ -195,12 +199,32 @@
         "sha256": "bf137d6cc48bf3390db4850aca81d4c48c1a837c87846bb336b954c0480bdfeb"
       },
       {
+        "path": "tools/contracts/0.8.0/k4-finish.cue",
+        "sha256": "d9db90bc0b136fd955d33b2198e6029d7a7029d8b02114a1041528bedd907438"
+      },
+      {
+        "path": "tools/contracts/0.8.0/k4-goal.cue",
+        "sha256": "d86f577bbf577e38600f3b1ee3ec710417e866ba2c0fccbadee7c5042b9f288c"
+      },
+      {
+        "path": "tools/contracts/0.8.0/k4-observe.cue",
+        "sha256": "f015a764b9d1b2f0a36d788e00e08461508758da885e305d1a4d2b9f40718bd1"
+      },
+      {
+        "path": "tools/contracts/0.8.0/k4-plan.cue",
+        "sha256": "d913c381f2e28ad3a770c8f14bb1d482aaaa5d03f86025bcee1bb7ec3673be39"
+      },
+      {
+        "path": "tools/contracts/0.8.0/k4-run.cue",
+        "sha256": "c23deac21c4b55a75ccecbce67f1e6b49745cd828c3d6223c3a709acbc4cb91c"
+      },
+      {
         "path": "tools/migrate-0.4.1-to-0.5.0",
         "sha256": "42b23b06f1dc3a9097a6df88c1c576f2d45aba16fa3617016c2430fe1fb659f8"
       },
       {
         "path": "tools/migrate-0.5.0-to-0.6.0",
-        "sha256": "6070b7282f515f863284cad6a4b7c0e24ef9cb0b811acc8b1485a553d46cd86f"
+        "sha256": "0d5caf16645ee9f5acf1be9c4ae0b352c782ebdb34a93c54dad56edc803b75f9"
       },
       {
         "path": "tools/stable-result",
@@ -254,6 +278,6 @@
       }
     ]
   },
-  "generated_unix_ms": 1789116277302,
+  "generated_unix_ms": 1789223875852,
   "schema": "k4-work-cycle-manifest/v2"
 }

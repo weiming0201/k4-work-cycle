@@ -41,34 +41,40 @@ and failure-before-write. CUE owns the meaning of accepted data. Each
 version-specific migration Tool consumes one exact source chain and an explicit
 policy for fields that cannot be inferred. The `0.4.1` migration uses frozen
 `0.5.0` CUE contracts, so later releases cannot silently alter its target. The
-`0.5.0` migration calls the current public entrypoints to build a `0.6.0` chain.
+`0.5.0` migration uses the frozen `0.8.0` target contracts to build a `0.6.0`
+chain; later public schemas cannot silently alter that historical target.
 
 ## 3. Five unequal contracts
 
 - Observe accepts a null predecessor or one exact Observe/Finish Account. It
   accepts only bootstrap semantics or an iteration delta, preserves Account
-  continuity, and generates the complete Account, lens index, and opening report.
+  continuity, and generates the complete Account, lens index, gap/conflict/
+  unknown indexes, completeness surface, and opening report.
 - Goal accepts one exact Observe Account and freezes one selected flat mandate,
-  including its selection rationale, exact execution envelope, and sourceable
-  judge identities. Its source inventory and canonical empty collections are
-  generated from the bound Account and retained semantics.
+  including its decision basis, change surface, seven-part boundary-feasibility
+  review, selection rationale, exact execution envelope, and sourceable judge
+  identities. Its source inventory and canonical empty collections are derived.
 - Plan accepts one exact frozen Goal and freezes one selected forward binary
   operation DAG, including its selection rationale, topology projection, and
   Plan-level abort response.
   Roots, phases, join dependencies, identities, coverage, and topology are
-  graph projections rather than caller-maintained fields.
+  graph projections rather than caller-maintained fields. Every real operation
+  owns structured preconditions, one complete local pass/fail judgment contract,
+  and explicit failure handling.
   Every operational permission, position, resource, tool, and maximum effect
   is mechanically contained by the Goal envelope.
 - Run accepts one exact Goal, Plan, existing ledger, and candidate event. It
-  validates graph activation and appends only operation, patch,
+  derives eligibility and the Plan-local judgment contract, validates graph
+  activation, and appends only operation, patch,
   abort-confirmation, or halt facts. Fixed patch fields and ledger-determined
   terminal fields are generated before append; an actual patch Finding is not
   generated and remains required semantic input.
 - Finish accepts the exact opening Account, Goal, Plan, and halted Run ledger.
-  Its semantic input is a closing Account delta plus actual judgments and
-  disposition. The Tool derives its Run projection, complete next Account,
-  settlement report, exact judges frozen by Goal, and the uniquely empty
-  terminal-result collection. Raw delta identity and route relations are
+  Its semantic input is a closing Account delta plus actual judgments, closure
+  actions, attribution, residual effects and disposition. The Tool derives its
+  Run projection, complete next Account, separate Account/closure source sets,
+  settlement report, exact judges and comparison contracts frozen by Goal, and
+  the uniquely empty terminal-result collection. Raw delta identity and route relations are
   preflighted before any lossy dictionary or set projection.
 
 Every binding includes the referenced schema, raw-file digest, and semantic
@@ -103,26 +109,29 @@ result edges must point forward and cannot cross phases. Plan owns one
 `on_abort` response: `preserve-only`, or a separate abort-route entry. It
 derives start, fork, join, and end positions from the selected graph.
 
-Run treats that graph as scheduling authority. Only `pass` and `fail` choose an
-operation edge. Findings and unknowns are event annotations. At most one
+Run treats that graph as scheduling authority. Only local `pass` and `fail`
+choose an operation edge. Findings and unknowns are event annotations. At most one
 emergency patch may precede an activated normal operation response, and its
 verification scope is fixed to mainline resumption. Abort requires one sourced
 external cancellation or recoverable runtime fact; Run then follows only the
 Plan's frozen response and cannot patch that response. A halt is exactly
 `plan-complete` or `abort`; an incomplete ledger is merely open. The projection
-retains every Plan operation as `pass`, `fail`, or `not-run` while the journal
+retains every Plan operation as `pass`, `fail`, or `not-run` and reports only
+`open`, `plan-complete`, or `abort` topology while the journal
 remains the only process history. Patch tools, permissions, read/write
 positions, resources, and maximum effects remain inside the Goal envelope
 rather than widening it at runtime.
 
 ## 6. Stable and temporary state
 
-Temporary semantic inputs may be edited during formation. Minimized Observe
+Temporary semantic inputs may be edited during formation. Observe
 iteration and Finish settlement inputs contain changed, added, and retired
 Account semantics; retained items and all aggregate Account fields are
 mechanically derived. Goal sources and canonical empty collections, Plan graph
 projections, and Run's fixed or ledger-determined fields are also generated.
-Observe, Goal, Plan, Finish, and Run projections are immutable materialized documents. A Run
+Observe, Goal, Plan, Finish, and Run projections are immutable materialized documents. Derived
+fields are rejected at the public semantic boundary rather than accepted as
+caller-maintained compatibility copies. A Run
 projection is valid only relative to its exact source ledger. Run events are
 immutable append-only facts. Stable structured outputs are created only by the
 Tool and are never hand-patched.
@@ -173,7 +182,8 @@ The isolated suite exercises one complete cycle, including:
   results, explicit abort confirmation, two-state halt, and projection;
 - Finish settlement in which a failed operation is recovered by the frozen
   route and the Goal still passes;
-- Finish rejection of an actual judge that differs from Goal;
+- Finish projection of the Goal judge/comparison contract and rejection of a
+  caller-supplied replacement scale;
 - legal zero-control and zero-patch settlement;
 - full adjacent `0.4.1` to `0.5.0` and `0.5.0` to `0.6.0` chain migrations with
   explicit digest transitions;

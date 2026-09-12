@@ -3,11 +3,13 @@
 Run is an append-only execution ledger for one exact Goal and Plan. A temporary
 event is either:
 
-- `operation-result`: one activated Plan operation's `pass` or `fail`, outputs,
-  evidence, trace, invariant observations, Findings, and unknowns;
+- `operation-result`: one activated Plan operation's local `pass` or `fail`,
+  outputs, evidence, trace, control observations, Findings, and unknowns; its
+  eligibility evidence and local judgment contract are derived from Plan and
+  the current ledger rather than supplied by the caller;
 - `emergency-patch`: the one permitted patch attempt for an operation, including
-  its script, exact positions, effects, application result, and deferred audit
-  material; or
+  its script, exact positions, effects, application result, evidence, and
+  deferred audit material; or
 - `abort-confirmed`: one sourced external cancellation or recoverable runtime
   failure fact that stops the normal route and activates the Plan-level abort
   response; or
@@ -22,8 +24,9 @@ the Tool neither invents Finding text from the reason nor supplies an empty
 Finding collection.
 
 An operation is appended once, after it is activated by the Plan and every join
-dependency has a response. Its binary result alone selects the frozen successor
-edge. Findings and unknowns are annotations and may accompany either result.
+dependency has a response. Its binary local result is judged only against that
+operation's projected Plan contract and selects the frozen successor edge.
+Findings and unknowns are annotations and may accompany either result.
 Operations that were never activated remain `not-run` in the projection.
 
 One emergency patch may restore an activated normal operation when the Plan omitted a
@@ -40,7 +43,8 @@ fact and executes the declared response.
 No event follows halt. `plan-complete` requires every activated normal branch
 to reach end and cannot follow abort confirmation. `abort` requires exactly one
 confirmation and every activated response branch to reach end. A ledger with
-neither terminal event remains open. The projection does
-not judge Goal acceptance or terminal controls; those belong to Finish. Run
+neither terminal event has topology status `open`; otherwise the status is
+`plan-complete` or `abort`. The projection does not judge whole-Goal acceptance
+or terminal controls; those belong to Finish. Run
 `scripts/append --help` for exact event fields. A projection is revalidated only
 by rederiving it from its exact source ledger through `scripts/validate`.

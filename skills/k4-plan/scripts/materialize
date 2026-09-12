@@ -24,11 +24,22 @@ Options:
 Semantic input:
   difference, selection_rationale: nonempty strings
   route: {claim, supporting_refs, counter_refs}
-  on_abort: {mode: preserve-only | route, entry_operation_index, reason}
+  on_abort: {mode: preserve-only | route, entry_operation_index?, reason}
+    entry_operation_index is required for route and derived as null for preserve-only
   operations[]: {operation_key, satisfies, controlled_by, tool_ref,
     responsible_ref, read_refs, write_refs, permission_refs, resource_refs,
-    maximum_side_effects, pre_checks, post_checks, idempotency, retry_limit,
-    recovery, on_result}
+    maximum_side_effects, preconditions, local_judgment, idempotency,
+    retry_limit, failure_handling, on_result}
+  preconditions[]: {statement, check_ref, expected_state}
+  local_judgment: {subject_ref, baseline_refs, actual_output_requirements,
+    required_evidence, pass_criteria, fail_criteria, check_ref, judge}
+  judge: {kind, ref, claim_limit}; kind is self | independent-agent | script | human
+  failure_handling: {mode, target_ref, action_ref, check_ref, reason}
+    mode is none | restore | compensate | preserve-stop; omit nullable refs
+    and the Tool supplies null. Operations with possible side effects cannot
+    use none; restore and compensate action_ref must be an available Goal tool.
+  read_refs, write_refs, permission_refs, resource_refs, and
+    maximum_side_effects may be omitted and become empty arrays.
   on_result: {pass, fail}; each result has next_operation_indices and reason
   blockers, unknowns: optional unique string arrays; omission means empty
 
@@ -95,6 +106,8 @@ def normalize(value: object) -> dict:
     abort = value.get("on_abort")
     if not isinstance(abort, dict):
         raise ValueError("input.on_abort: expected one object")
+    if abort.get("mode") == "preserve-only":
+        abort.setdefault("entry_operation_index", None)
     abort_indices: set[int] = set()
     entry = abort.get("entry_operation_index")
     if abort.get("mode") == "route" and isinstance(entry, int) and 0 <= entry < len(operations):
@@ -104,6 +117,13 @@ def normalize(value: object) -> dict:
                 abort_indices.update(target for target in outgoing[source] if 0 <= target < len(operations))
 
     for index, operation in enumerate(operations):
+        for name in ("read_refs", "write_refs", "permission_refs", "resource_refs", "maximum_side_effects"):
+            operation.setdefault(name, [])
+        failure = operation.get("failure_handling")
+        if isinstance(failure, dict):
+            failure.setdefault("target_ref", None)
+            failure.setdefault("action_ref", None)
+            failure.setdefault("check_ref", None)
         expected_phase = "abort" if index in abort_indices else "normal"
         if "phase" in operation and operation["phase"] != expected_phase:
             raise ValueError(f"input.operations[{index}].phase: contradicts the graph and on_abort entry")
