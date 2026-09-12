@@ -1,0 +1,22 @@
+#!/bin/sh
+set -eu
+
+script_dir=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+skill_dir=$(dirname -- "$script_dir")
+tool=${K4_STABLE_RESULT:-}
+
+if [ "${1:-}" = "--help" ]; then
+    printf '%s\n' \
+        'Usage: project --log FILE --output FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE --bind run=FILE' \
+        '' \
+        'Project one append-only Finish closure ledger into its open or halted current view.' \
+        'Exit status: 0 on projection; 1 on invalid log, binding, or unsafe write.'
+    exit 0
+fi
+
+if [ -z "$tool" ]; then tool=$(command -v stable-result || true); fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../tools/stable-result" ]; then tool="$skill_dir/../../tools/stable-result"; fi
+if [ -z "$tool" ] && [ -x "$skill_dir/../../workspace/tools/stable-result" ]; then tool="$skill_dir/../../workspace/tools/stable-result"; fi
+if [ -z "$tool" ]; then echo "stable-result is not available" >&2; exit 1; fi
+
+exec "$tool" --contract "$skill_dir/assets/protocol.cue" project --expression project_closure "$@"

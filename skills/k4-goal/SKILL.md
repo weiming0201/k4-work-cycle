@@ -27,13 +27,18 @@ not choose or perform the process that might realize the change.
   Expected value includes attainable benefit, cost, uncertainty, downside,
   reversibility, information benefit, effects, and maximum loss. Confidence is
   evidence for that comparison, never a universal action threshold.
-- Select exactly one primary facet as the direct control variable. Declare its
-  incident seams and junctions open, bounded, or frozen. Other facets change
-  only through declared derivative effects; their interiors, nonincident
-  positions, subject identity, and subject boundary remain frozen.
+- Freeze one direct change claim, the positions changed directly, foreseeable
+  derivative effects and affected positions, and the positions held fixed.
+  These are task-native boundaries; an observation lens is not automatically a
+  control variable. Use the optional single-facet specialization only when the
+  target really has that topology, then classify its six incident positions as
+  open, bounded, or frozen rather than imposing that coordinate on every Goal.
 - Acceptance describes observable result state. Controls describe bounded
   variables and allowed domains. Neither is an operation or a completed
   judgment.
+- Separately freeze the exact closure-action subset that Finish may use after
+  Run: permitted kinds, count, tools, permissions, positions, resources, and
+  effects. It is a subset of the overall execution envelope, not a later grant.
 - Goal does not form a DAG, execute work, admit post-cutoff evidence, or revise
   a frozen Goal. A blocked candidate remains blocked rather than being repaired
   later by Plan.
@@ -52,9 +57,9 @@ or Tool source.
 ## Disposition
 
 Commit one Goal containing its Observe sources, objective, target, decision
-basis, baseline, scope, acceptance points, controls, judges, authority, tools,
-permissions, positions, resources, budget, maximum effects, blockers, and
-unknowns. Unknowns are annotations; only a blocker prevents freezing.
+basis, change contract, baseline, scope, acceptance points, controls, judges,
+execution envelope, closure policy, blockers, and unknowns. Unknowns are
+annotations; only a blocker prevents freezing.
 
 Plan may consume exactly one frozen Goal. Any semantic change requires a new
 Goal. Do not hand-author, patch, or bypass stable JSON. A refusal or not-frozen

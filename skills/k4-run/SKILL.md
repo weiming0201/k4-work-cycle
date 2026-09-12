@@ -28,8 +28,9 @@ attempt passed; that responsibility belongs to Finish.
 - Record findings, unknowns, and recommendations without amending Observe,
   Goal, or Plan. Thinking about another responsibility is allowed; exercising
   that responsibility is not.
-- If a significant Plan omission blocks the active operation, allow at most
-  one emergency patch attempt under the frozen Goal and patch policy. Record
+- If a significant Plan omission matches that operation's frozen patch seam,
+  allow its one emergency patch attempt. No seam means no patch authority.
+  Record
   its script, boundaries, effects, result, findings, and unknowns. Do not add a
   systematic validation objective for the patch; retry the original operation
   and let that operation select its route.
@@ -52,12 +53,14 @@ consistency.
 
 ## Disposition
 
-The stable result is the immutable linear ledger plus its halt fact. Append an
+The stable result is the immutable linear execution ledger plus its halt fact. Append an
 event after each operation, emergency patch, or abort confirmation; never edit
 an event. A projection is reconstructible state, not history. The ledger tells
 Finish what ran and what happened. It never turns route completion or a local
 operation result into final acceptance.
 
-Do not hand-author, patch, reorder, truncate, or replace stable events.
+Do not hand-author, patch, reorder, truncate, or replace stable events. Finish
+closure actions belong to a later, separately bound append-only ledger; they
+are not Run events.
 Ordinary use does not require reading the CUE contract or Tool source. Correct
 named public omissions or contradictions; do not bypass the contract.

@@ -26,6 +26,12 @@ preserve-stop names what remains stable and how that state is checked without
 inventing a corrective action. Empty operation envelope collections are
 canonical and may be omitted from temporary input.
 
+A normal operation may optionally freeze one emergency-patch seam. It states
+the triggering omission and exact tools, permissions, read/write positions,
+resources, and effects for one repair attempt. The Tool fixes the attempt
+ceiling to one and the return position to the owning operation. An omitted seam
+means no patch authority; the broader Goal envelope is not a fallback.
+
 The contract generates normal entries and phases, join dependencies, operation
 identities, Goal coverage, and a topology projection. Entry operations are the virtual start projection. Multiple
 successors are a fork; multiple exact dependencies are a join; empty successors

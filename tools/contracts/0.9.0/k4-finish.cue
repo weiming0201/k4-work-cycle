@@ -121,55 +121,15 @@ context: _
 	refs:      #NonEmptyStrings
 })
 #ClosureAction: close({
-	action_key:           #Text
-	kind:                 "verify" | "cleanup" | "release" | "rollback" | "compensate" | "package"
-	authorized_by:        #NonEmptyStrings
-	tool_ref:             #Text
-	permission_refs:      #Strings
-	read_refs:            #Strings
-	write_refs:           #Strings
-	resource_refs:        #Strings
-	maximum_side_effects: #Strings
-	result:               #Result
-	actual_refs:          #Strings
-	evidence_refs:        #NonEmptyStrings
-	actual_effect_refs:   #Strings
+	action_key:         #Text
+	kind:               "verify" | "cleanup" | "release" | "rollback" | "compensate" | "package"
+	authorized_by:      #NonEmptyStrings
+	result:             #Result
+	actual_refs:        #Strings
+	evidence_refs:      #NonEmptyStrings
+	actual_effect_refs: #Strings
 	findings: [...#Finding]
 	unknowns: [...#Unknown]
-})
-#ClosureHalt: close({
-	kind:          "halt"
-	reason:        #Text
-	evidence_refs: #NonEmptyStrings
-})
-#ClosureEvent: #ClosureAction | #ClosureHalt
-#ClosureEventEnvelope: close({
-	schema:                "k4-finish-closure-event/v1"
-	sequence:              uint
-	recorded_unix_ms:      uint
-	previous_event_sha256: null | #Digest
-	content_sha256:        #Digest
-	event_sha256:          #Digest
-	bindings: close({
-		previous_account: #Binding
-		goal:             #Binding
-		plan:             #Binding
-		run:              #Binding
-	})
-	event: #ClosureEvent
-})
-#ClosureProjection: close({
-	status:  "open" | "halted"
-	actions: [...#ClosureAction]
-	halt:    null | #ClosureHalt
-	event_count:              uint
-	last_sequence:            null | uint
-	ledger_head_event_sha256: null | #Digest
-})
-#ClosureLedgerInput: close({
-	ref:        #Text
-	sha256:     #Digest
-	projection: #ClosureProjection
 })
 #Attribution: close({
 	stage:         "observe" | "goal" | "plan" | "run" | "finish"
@@ -221,7 +181,6 @@ context: _
 	terminal_control_results: [...#Judgment]
 	closure_source_refs: #Strings
 	closure_actions: [...#ClosureAction]
-	closure_halt: #ClosureHalt
 	attributions: [...#Attribution]
 	residual_effects: [...#ResidualEffect]
 	attempt_result:    #Result
@@ -233,21 +192,17 @@ context: _
 		resume_ref: null | #Text
 		abort:      null | #AbortSummary
 	})
-	result_disposition:        #Disposition
-	incomplete_deliverable:    null | #Incomplete
-	run_log_ref:               #Text
-	run_log_sha256:            #Digest
-	run_head_event_sha256:     #Digest
-	closure_log_ref:           #Text
-	closure_log_sha256:        #Digest
-	closure_head_event_sha256: null | #Digest
+	result_disposition:     #Disposition
+	incomplete_deliverable: null | #Incomplete
+	run_log_ref:            #Text
+	run_head_event_sha256:  #Digest
 })
 #Document: close({
 	account: #Account
 	closure: #Closure
 })
 #Envelope: close({
-	schema:            "k4-finish-document/v6"
+	schema:            "k4-finish-document/v5"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({
@@ -266,7 +221,7 @@ context: _
 	document: {account: #Account, ...}
 }
 #GoalEnvelope: {
-	schema:            "k4-goal-document/v8"
+	schema:            "k4-goal-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {observe: #Binding, ...}
@@ -274,23 +229,9 @@ context: _
 		status: "frozen"
 		execution_envelope: {
 			authorization_ref:    #Text
-			available_tools:      #NonEmptyStrings
 			permission_refs:      #NonEmptyStrings
-			read_refs:            #NonEmptyStrings
-			write_refs:           #NonEmptyStrings
-			resources:            #NonEmptyStrings
 			maximum_side_effects: #NonEmptyStrings
 			...
-		}
-		closure_policy: {
-			maximum_actions: uint
-			allowed_kinds: [...#Text]
-			available_tools:      #Strings
-			permission_refs:      #Strings
-			read_refs:            #Strings
-			write_refs:           #Strings
-			resources:            #Strings
-			maximum_side_effects: #Strings
 		}
 		acceptance_points: [{point_id: #Text, judge: #Judge, acceptance: _, ...}, ...]
 		control_contracts: [...{control_id: #Text, check_timing: "invariant" | "terminal", judge: #Judge, ...}]
@@ -298,7 +239,7 @@ context: _
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v9"
+	schema:            "k4-plan-document/v8"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding, ...}
@@ -310,7 +251,7 @@ context: _
 	}
 }
 #RunEnvelope: {
-	schema:            "k4-run-projection/v8"
+	schema:            "k4-run-projection/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding, plan: #Binding, ...}
@@ -344,13 +285,11 @@ context: _
 	retired: [...#Retired]
 	acceptance_results: [#JudgmentInput, ...#JudgmentInput]
 	terminal_control_results: [...#JudgmentInput]
-	closure_ledger: #ClosureLedgerInput
+	closure_actions: *[] | [...#ClosureAction]
 	attributions: *[] | [...#Attribution]
 	residual_effects: *[] | [...#ResidualEffect]
 	result_disposition:     #Disposition
 	incomplete_deliverable: null | #Incomplete
-	run_log_ref:            #Text
-	run_log_sha256:         #Digest
 })
 
 _input: #Input & context.input
@@ -364,93 +303,6 @@ _bindings: close({
 	plan:             _plan.binding
 	run:              _run.binding
 })
-
-_closurePolicy: _goal.value.document.closure_policy
-_closureEvents: [...#ClosureEventEnvelope] & context.events
-_closureActions: [for envelope in _closureEvents if envelope.event.kind != "halt" {envelope.event & #ClosureAction}]
-_closureHalts: [for envelope in _closureEvents if envelope.event.kind == "halt" {envelope.event & #ClosureHalt}]
-_closureActionKeys: [for action in _closureActions {action.action_key}]
-_closureStatus: "open" | "halted"
-_closureHalt:   null | #ClosureHalt
-if len(_closureHalts) == 0 {
-	_closureStatus: "open"
-	_closureHalt:   null
-}
-if len(_closureHalts) == 1 {
-	_closureStatus: "halted"
-	_closureHalt:   _closureHalts[0]
-}
-_closureLastSequence: null | uint
-_closureLedgerHead:   null | #Digest
-if len(_closureEvents) == 0 {
-	_closureLastSequence: null
-	_closureLedgerHead:   null
-}
-if len(_closureEvents) > 0 {
-	_closureLastSequence: len(_closureEvents) - 1
-	_closureLedgerHead:   _closureEvents[len(_closureEvents)-1].event_sha256
-}
-_closureLedgerChecks: {
-	_keysUnique: list.UniqueItems(_closureActionKeys) & true
-	if len(_closureHalts) > 1 {_invalid: error("Finish closure ledger permits exactly one terminal halt")}
-	if len(_closureHalts) == 1 {
-		if _closureEvents[len(_closureEvents)-1].event.kind != "halt" {_invalid: error("Finish closure halt must be the final event")}
-	}
-	if len(_closureActions) > _closurePolicy.maximum_actions {_invalid: error("Finish closure ledger exceeds Goal closure_policy.maximum_actions")}
-	for envelope in _closureEvents {
-		if envelope.bindings != _bindings {_invalid: error("Finish closure event bindings must equal the opening Account, Goal, Plan, and halted Run")}
-	}
-	for _action in _closureActions {
-		if !list.Contains(_closurePolicy.allowed_kinds, _action.kind) {_invalid: error("closure action kind is not allowed by Goal closure_policy")}
-		if !list.Contains(_closurePolicy.available_tools, _action.tool_ref) {_invalid: error("closure action tool is not allowed by Goal closure_policy")}
-		for ref in _action.authorized_by {if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_closurePolicy.permission_refs, ref) {_invalid: error("closure action authority is outside Goal closure_policy")}}
-		for ref in _action.permission_refs {if !list.Contains(_closurePolicy.permission_refs, ref) {_invalid: error("closure action permission is outside Goal closure_policy")}}
-		for ref in _action.read_refs {if !list.Contains(_closurePolicy.read_refs, ref) {_invalid: error("closure action read position is outside Goal closure_policy")}}
-		for ref in _action.write_refs {if !list.Contains(_closurePolicy.write_refs, ref) {_invalid: error("closure action write position is outside Goal closure_policy")}}
-		for ref in _action.resource_refs {if !list.Contains(_closurePolicy.resources, ref) {_invalid: error("closure action resource is outside Goal closure_policy")}}
-		for ref in _action.maximum_side_effects {if !list.Contains(_closurePolicy.maximum_side_effects, ref) {_invalid: error("closure action maximum effect is outside Goal closure_policy")}}
-		for ref in _action.actual_effect_refs {if !list.Contains(_action.maximum_side_effects, ref) {_invalid: error("closure action actual effect is outside its recorded maximum effects")}}
-	}
-}
-_closureInput: #ClosureEvent & context.input
-_closureCandidateChecks: {
-	if len(_closureHalts) > 0 {_invalid: error("Finish closure ledger is halted and accepts no further event")}
-	if _closureInput.kind != "halt" {
-		_action: _closureInput & #ClosureAction
-		if len(_closureActions) >= _closurePolicy.maximum_actions {_invalid: error("Goal closure_policy allows no further closure action")}
-		if list.Contains(_closureActionKeys, _action.action_key) {_invalid: error("closure action_key is already present in the Finish ledger")}
-		if !list.Contains(_closurePolicy.allowed_kinds, _action.kind) {_invalid: error("closure action kind is not allowed by Goal closure_policy")}
-		if !list.Contains(_closurePolicy.available_tools, _action.tool_ref) {_invalid: error("closure action tool is not allowed by Goal closure_policy")}
-		for ref in _action.authorized_by {if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_closurePolicy.permission_refs, ref) {_invalid: error("closure action authority is outside Goal closure_policy")}}
-		for ref in _action.permission_refs {if !list.Contains(_closurePolicy.permission_refs, ref) {_invalid: error("closure action permission is outside Goal closure_policy")}}
-		for ref in _action.read_refs {if !list.Contains(_closurePolicy.read_refs, ref) {_invalid: error("closure action read position is outside Goal closure_policy")}}
-		for ref in _action.write_refs {if !list.Contains(_closurePolicy.write_refs, ref) {_invalid: error("closure action write position is outside Goal closure_policy")}}
-		for ref in _action.resource_refs {if !list.Contains(_closurePolicy.resources, ref) {_invalid: error("closure action resource is outside Goal closure_policy")}}
-		for ref in _action.maximum_side_effects {if !list.Contains(_closurePolicy.maximum_side_effects, ref) {_invalid: error("closure action maximum effect is outside Goal closure_policy")}}
-		for ref in _action.actual_effect_refs {if !list.Contains(_action.maximum_side_effects, ref) {_invalid: error("closure action actual effect is outside its recorded maximum effects")}}
-	}
-}
-
-next_closure_event: _closureLedgerChecks & _closureCandidateChecks & close({
-	schema:   "k4-finish-closure-event/v1"
-	bindings: _bindings
-	event:    _closureInput
-})
-
-project_closure: _closureLedgerChecks & close({
-	schema:   "k4-finish-closure-projection/v1"
-	bindings: _bindings
-	document: close({
-		status:                   _closureStatus
-		actions:                  _closureActions
-		halt:                     _closureHalt
-		event_count:              len(_closureEvents)
-		last_sequence:            _closureLastSequence
-		ledger_head_event_sha256: _closureLedgerHead
-	})
-})
-
-validate_closure_log: _closureLedgerChecks & _closureEvents
 
 _generatedItems: [for item in _input.items {
 	_core: close({
@@ -582,11 +434,6 @@ _terminalUnknowns: list.Concat([for result in _input.terminal_control_results {
 	}]
 }])
 _unknowns: list.Concat([_operationUnknowns, _patchUnknowns, _acceptanceUnknowns, _terminalUnknowns])
-_finishActions: _input.closure_ledger.projection.actions
-_finishHalt:    _input.closure_ledger.projection.halt
-_finishHaltEvidenceRefs: [...#Text]
-if _finishHalt == null {_finishHaltEvidenceRefs: []}
-if _finishHalt != null {_finishHaltEvidenceRefs: _finishHalt.evidence_refs}
 
 _actualOperations: [for operation in _run.value.document.operations if operation.local_result != "not-run" {operation}]
 _notRunOperations: [for operation in _run.value.document.operations if operation.local_result == "not-run" {operation}]
@@ -634,49 +481,17 @@ _accountEvidenceRaw: list.Concat(list.Concat([
 	[for item in _input.retired {item.evidence_refs}],
 ]))
 _accountSourceRefs: [for index, ref in _accountEvidenceRaw if len([for priorIndex, priorRef in _accountEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
-_runEvidenceRawBase: list.Concat(list.Concat([
-	[for result in _run.value.document.operation_results {result.actual_output_refs}],
-	[for result in _run.value.document.operation_results {result.evidence_refs}],
-	[for result in _run.value.document.operation_results {result.trace_refs}],
-	[for result in _run.value.document.operation_results {list.Concat([for finding in result.findings {finding.evidence_refs}])}],
-	[for result in _run.value.document.operation_results {list.Concat([for unknown in result.unknowns {unknown.basis_refs}])}],
-	[for patch in _run.value.document.emergency_patches {patch.actual_side_effect_refs}],
-	[for patch in _run.value.document.emergency_patches {patch.evidence_refs}],
-	[for patch in _run.value.document.emergency_patches {patch.trace_refs}],
-	[for patch in _run.value.document.emergency_patches {list.Concat([for finding in patch.findings {finding.evidence_refs}])}],
-	[for patch in _run.value.document.emergency_patches {list.Concat([for unknown in patch.unknowns {unknown.basis_refs}])}],
-	[for result in _run.value.document.invariant_control_results {list.Concat([for observation in result.observations {observation.actual_refs}])}],
-	[for result in _run.value.document.invariant_control_results {list.Concat([for observation in result.observations {observation.trace_refs}])}],
-	[for result in _run.value.document.invariant_control_results {list.Concat([for observation in result.observations {observation.comparison_refs}])}],
-	[for result in _run.value.document.invariant_control_results {list.Concat([for observation in result.observations {observation.evidence_refs}])}],
-	[_abortEvidenceRefs],
-	[_run.value.document.halt.evidence_refs],
-	[_run.value.document.halt.budget_evidence_refs],
-	[_run.value.document.halt.side_effect_evidence_refs],
-]))
-_runEvidenceRaw: list.Concat([_runEvidenceRawBase, [_input.run_log_ref]])
-_finishEvidenceRaw: list.Concat(list.Concat([
-	[for action in _finishActions {action.actual_refs}],
-	[for action in _finishActions {action.evidence_refs}],
-	[for action in _finishActions {action.actual_effect_refs}],
-	[for action in _finishActions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
-	[for action in _finishActions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
-	[_finishHaltEvidenceRefs],
-	[[_input.closure_ledger.ref]],
-]))
-_allowedSettlementRaw: list.Concat([_previous.value.document.account.source_refs, _runEvidenceRaw, _finishEvidenceRaw])
-_allowedSettlementRefs: [for index, ref in _allowedSettlementRaw if len([for priorIndex, priorRef in _allowedSettlementRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 _closureEvidenceRaw: list.Concat(list.Concat([
 	[for result in _acceptanceResults {result.evidence_refs}],
 	[for result in _terminalControlResults {result.evidence_refs}],
 	[for finding in _findings {finding.evidence_refs}],
 	[for unknown in _unknowns {unknown.basis_refs}],
-	[for action in _finishActions {action.actual_refs}],
-	[for action in _finishActions {action.evidence_refs}],
-	[for action in _finishActions {action.actual_effect_refs}],
-	[for action in _finishActions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
-	[for action in _finishActions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
-	[_finishHaltEvidenceRefs],
+	[for action in _input.closure_actions {action.authorized_by}],
+	[for action in _input.closure_actions {action.actual_refs}],
+	[for action in _input.closure_actions {action.evidence_refs}],
+	[for action in _input.closure_actions {action.actual_effect_refs}],
+	[for action in _input.closure_actions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
+	[for action in _input.closure_actions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
 	[for attribution in _input.attributions {attribution.evidence_refs}],
 	[for effect in _input.residual_effects {effect.refs}],
 	[_abortEvidenceRefs],
@@ -717,7 +532,6 @@ _generateChecks: {
 		}
 		for ref in item.evidence_refs {
 			if !list.Contains(_accountSourceRefs, ref) {_invalid: error("item evidence must be present in derived Account sources")}
-			if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("item evidence must come from the opening Account, actual Run, or actual Finish closure")}
 		}
 		if item.change != "retained" {
 			if len([for ref in item.evidence_refs if list.Contains(_deltaEvidence, ref) {ref}]) == 0 {_invalid: error("changed item evidence must be present in the derived Account delta")}
@@ -731,19 +545,15 @@ _generateChecks: {
 		for ref in retired.evidence_refs {
 			if !list.Contains(_accountSourceRefs, ref) {_invalid: error("retirement evidence must be present in derived Account sources")}
 			if !list.Contains(_deltaEvidence, ref) {_invalid: error("retirement evidence must be present in the derived Account delta")}
-			if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("retirement evidence must come from the opening Account, actual Run, or actual Finish closure")}
 		}
 	}
 	for result in list.Concat([_input.acceptance_results, _input.terminal_control_results]) {
-		for ref in result.actual_refs {if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("judgment actual_refs must come from the opening Account, actual Run, or actual Finish closure")}}
 		for ref in result.evidence_refs {
 			if !list.Contains(_closureSourceRefs, ref) {_invalid: error("judgment evidence must be present in derived closure sources")}
-			if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("judgment evidence must come from the opening Account, actual Run, or actual Finish closure")}
 		}
 		for unknown in result.unknowns {
 			for ref in unknown.basis_refs {
 				if !list.Contains(_closureSourceRefs, ref) {_invalid: error("judgment unknown evidence must be present in derived closure sources")}
-				if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("judgment unknown evidence must come from the opening Account, actual Run, or actual Finish closure")}
 			}
 		}
 	}
@@ -760,18 +570,10 @@ _generateChecks: {
 	for ref in _abortEvidenceRefs {
 		if !list.Contains(_closureSourceRefs, ref) {_invalid: error("abort evidence must be present in derived closure sources")}
 	}
-	if _input.closure_ledger.projection.status != "halted" {_invalid: error("Finish materialization requires a halted closure ledger")}
-	if _finishHalt == null {_invalid: error("Finish materialization requires an explicit closure halt")}
-	if _input.closure_ledger.projection.event_count != len(_finishActions)+1 {_invalid: error("halted closure event_count must equal actions plus one halt")}
-	if _input.closure_ledger.projection.ledger_head_event_sha256 == null {_invalid: error("halted closure ledger requires a head")}
-	for action in _finishActions {
+	for action in _input.closure_actions {
 		for ref in action.authorized_by {
 			if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_goal.value.document.execution_envelope.permission_refs, ref) {_invalid: error("closure action authority must be present in the Goal execution envelope")}
 		}
-		for attribution in _input.attributions {for ref in attribution.evidence_refs {if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("attribution evidence must come from the opening Account, actual Run, or actual Finish closure")}}}
-		for effect in _input.residual_effects {for ref in effect.refs {if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("residual effect refs must come from the opening Account, actual Run, or actual Finish closure")}}}
-		for ref in _input.result_disposition.refs {if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("result disposition refs must come from the opening Account, actual Run, or actual Finish closure")}}
-		if _input.incomplete_deliverable != null {for ref in _input.incomplete_deliverable.refs {if !list.Contains(_allowedSettlementRefs, ref) {_invalid: error("incomplete deliverable refs must come from the opening Account, actual Run, or actual Finish closure")}}}
 		for ref in action.actual_effect_refs {
 			if !list.Contains(_goal.value.document.execution_envelope.maximum_side_effects, ref) {_invalid: error("closure action effect must be present in the Goal maximum side effects")}
 		}
@@ -805,8 +607,7 @@ _document: #Document & {
 		acceptance_results:       _acceptanceResults
 		terminal_control_results: _terminalControlResults
 		closure_source_refs:      _closureSourceRefs
-		closure_actions:          _finishActions
-		closure_halt:             _finishHalt
+		closure_actions:          _input.closure_actions
 		attributions:             _input.attributions
 		residual_effects:         _input.residual_effects
 		attempt_result:           _attemptResult
@@ -827,19 +628,15 @@ _document: #Document & {
 			resume_ref: _run.value.document.halt.resume_ref
 			abort:      _abortSummary
 		}
-		result_disposition:        _input.result_disposition
-		incomplete_deliverable:    _input.incomplete_deliverable
-		run_log_ref:               _input.run_log_ref
-		run_log_sha256:            _input.run_log_sha256
-		run_head_event_sha256:     _run.value.document.ledger_head_event_sha256
-		closure_log_ref:           _input.closure_ledger.ref
-		closure_log_sha256:        _input.closure_ledger.sha256
-		closure_head_event_sha256: _input.closure_ledger.projection.ledger_head_event_sha256
+		result_disposition:     _input.result_disposition
+		incomplete_deliverable: _input.incomplete_deliverable
+		run_log_ref:            _run.binding.ref
+		run_head_event_sha256:  _run.value.document.ledger_head_event_sha256
 	}
 }
 
 generate: _generateChecks & close({
-	schema:   "k4-finish-document/v6"
+	schema:   "k4-finish-document/v5"
 	bindings: _bindings
 	document: _document
 })
@@ -899,28 +696,17 @@ _existingClosureEvidenceRaw: list.Concat(list.Concat([
 	[for result in _existing.document.closure.terminal_control_results {result.evidence_refs}],
 	[for finding in _existing.document.closure.findings {finding.evidence_refs}],
 	[for unknown in _existing.document.closure.unknowns {unknown.basis_refs}],
+	[for action in _existing.document.closure.closure_actions {action.authorized_by}],
 	[for action in _existing.document.closure.closure_actions {action.actual_refs}],
 	[for action in _existing.document.closure.closure_actions {action.evidence_refs}],
 	[for action in _existing.document.closure.closure_actions {action.actual_effect_refs}],
 	[for action in _existing.document.closure.closure_actions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
 	[for action in _existing.document.closure.closure_actions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
-	[_existing.document.closure.closure_halt.evidence_refs],
 	[for attribution in _existing.document.closure.attributions {attribution.evidence_refs}],
 	[for effect in _existing.document.closure.residual_effects {effect.refs}],
 	[_abortEvidenceRefs],
 ]))
 _expectedExistingClosureSources: [for index, ref in _existingClosureEvidenceRaw if len([for priorIndex, priorRef in _existingClosureEvidenceRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
-_existingFinishEvidenceRaw: list.Concat(list.Concat([
-	[for action in _existing.document.closure.closure_actions {action.actual_refs}],
-	[for action in _existing.document.closure.closure_actions {action.evidence_refs}],
-	[for action in _existing.document.closure.closure_actions {action.actual_effect_refs}],
-	[for action in _existing.document.closure.closure_actions {list.Concat([for finding in action.findings {finding.evidence_refs}])}],
-	[for action in _existing.document.closure.closure_actions {list.Concat([for unknown in action.unknowns {unknown.basis_refs}])}],
-	[_existing.document.closure.closure_halt.evidence_refs],
-	[[_existing.document.closure.closure_log_ref]],
-]))
-_existingAllowedSettlementRaw: list.Concat([_previous.value.document.account.source_refs, _runEvidenceRawBase, [_existing.document.closure.run_log_ref], _existingFinishEvidenceRaw])
-_existingAllowedSettlementRefs: [for index, ref in _existingAllowedSettlementRaw if len([for priorIndex, priorRef in _existingAllowedSettlementRaw if priorIndex < index && priorRef == ref {priorRef}]) == 0 {ref}]
 _existingChangeEvidence: list.Concat(list.Concat([
 	[for item in _existingItems if item.change != "retained" {item.evidence_refs}],
 	[for item in _existing.document.account.retired {item.evidence_refs}],
@@ -976,7 +762,6 @@ _validateChecks: {
 		}
 		for ref in item.evidence_refs {
 			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
-			if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("item evidence must come from the opening Account, actual Run, or actual Finish closure")}
 		}
 		if item.change != "retained" {
 			if len([for ref in item.evidence_refs if list.Contains(_existing.document.account.delta.evidence_refs, ref) {ref}]) == 0 {_invalid: error("contract relation rejected: len([for ref in item.evidence_refs if list.Contains(_existing.document.account.delta.evidence_refs, ref) {ref}]) == 0")}
@@ -990,19 +775,15 @@ _validateChecks: {
 		for ref in retired.evidence_refs {
 			if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 			if !list.Contains(_existing.document.account.delta.evidence_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.delta.evidence_refs, ref)")}
-			if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("retirement evidence must come from the opening Account, actual Run, or actual Finish closure")}
 		}
 	}
 	for result in list.Concat([_existing.document.closure.acceptance_results, _existing.document.closure.terminal_control_results]) {
-		for ref in result.actual_refs {if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("judgment actual_refs must come from the opening Account, actual Run, or actual Finish closure")}}
 		for ref in result.evidence_refs {
 			if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("judgment evidence must be present in closure sources")}
-			if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("judgment evidence must come from the opening Account, actual Run, or actual Finish closure")}
 		}
 		for unknown in result.unknowns {
 			for ref in unknown.basis_refs {
 				if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("judgment unknown evidence must be present in closure sources")}
-				if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("judgment unknown evidence must come from the opening Account, actual Run, or actual Finish closure")}
 			}
 		}
 	}
@@ -1022,24 +803,13 @@ _validateChecks: {
 		if !list.Contains(_existing.document.closure.closure_source_refs, ref) {_invalid: error("abort evidence must be present in closure sources")}
 	}
 	for action in _existing.document.closure.closure_actions {
-		if !list.Contains(_goal.value.document.closure_policy.allowed_kinds, action.kind) {_invalid: error("closure action kind is not allowed by Goal closure_policy")}
-		if !list.Contains(_goal.value.document.closure_policy.available_tools, action.tool_ref) {_invalid: error("closure action tool is not allowed by Goal closure_policy")}
 		for ref in action.authorized_by {
-			if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_goal.value.document.closure_policy.permission_refs, ref) {_invalid: error("closure action authority is outside Goal closure_policy")}
+			if ref != _goal.value.document.execution_envelope.authorization_ref && !list.Contains(_goal.value.document.execution_envelope.permission_refs, ref) {_invalid: error("closure action authority must be present in the Goal execution envelope")}
 		}
-		for ref in action.permission_refs {if !list.Contains(_goal.value.document.closure_policy.permission_refs, ref) {_invalid: error("closure action permission is outside Goal closure_policy")}}
-		for ref in action.read_refs {if !list.Contains(_goal.value.document.closure_policy.read_refs, ref) {_invalid: error("closure action read position is outside Goal closure_policy")}}
-		for ref in action.write_refs {if !list.Contains(_goal.value.document.closure_policy.write_refs, ref) {_invalid: error("closure action write position is outside Goal closure_policy")}}
-		for ref in action.resource_refs {if !list.Contains(_goal.value.document.closure_policy.resources, ref) {_invalid: error("closure action resource is outside Goal closure_policy")}}
-		for ref in action.maximum_side_effects {if !list.Contains(_goal.value.document.closure_policy.maximum_side_effects, ref) {_invalid: error("closure action maximum effect is outside Goal closure_policy")}}
-		for ref in action.actual_effect_refs {if !list.Contains(action.maximum_side_effects, ref) {_invalid: error("closure action actual effect is outside its recorded maximum effects")}}
+		for ref in action.actual_effect_refs {
+			if !list.Contains(_goal.value.document.execution_envelope.maximum_side_effects, ref) {_invalid: error("closure action effect must be present in the Goal maximum side effects")}
+		}
 	}
-	if len(_existing.document.closure.closure_actions) > _goal.value.document.closure_policy.maximum_actions {_invalid: error("closure actions exceed Goal closure_policy.maximum_actions")}
-	_closureKeysUnique: list.UniqueItems([for action in _existing.document.closure.closure_actions {action.action_key}]) & true
-	for attribution in _existing.document.closure.attributions {for ref in attribution.evidence_refs {if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("attribution evidence must come from the opening Account, actual Run, or actual Finish closure")}}}
-	for effect in _existing.document.closure.residual_effects {for ref in effect.refs {if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("residual effect refs must come from the opening Account, actual Run, or actual Finish closure")}}}
-	for ref in _existing.document.closure.result_disposition.refs {if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("result disposition refs must come from the opening Account, actual Run, or actual Finish closure")}}
-	if _existing.document.closure.incomplete_deliverable != null {for ref in _existing.document.closure.incomplete_deliverable.refs {if !list.Contains(_existingAllowedSettlementRefs, ref) {_invalid: error("incomplete deliverable refs must come from the opening Account, actual Run, or actual Finish closure")}}}
 	for ref in _existing.document.account.delta.evidence_refs {
 		if !list.Contains(_existing.document.account.source_refs, ref) {_invalid: error("contract relation rejected: !list.Contains(_existing.document.account.source_refs, ref)")}
 		if !list.Contains(_existingChangeEvidence, ref) {_invalid: error("contract relation rejected: !list.Contains(_existingChangeEvidence, ref)")}

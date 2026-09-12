@@ -16,12 +16,21 @@ def require(condition: bool, message: str) -> None:
         raise AssertionError(message)
 
 
-def refuse_materialize(skill: str, value: dict, output: Path, bindings: list[tuple[str, Path]], run_log: Path | None = None) -> None:
+def refuse_materialize(
+    skill: str,
+    value: dict,
+    output: Path,
+    bindings: list[tuple[str, Path]],
+    run_log: Path | None = None,
+    closure_log: Path | None = None,
+) -> None:
     source = output.with_suffix(".input.json")
     write_json(source, value)
     words = [str(ROOT / "skills" / skill / "scripts" / "materialize"), "--input", str(source), "--output", str(output)]
     if run_log is not None:
         words.extend(("--run-log", str(run_log)))
+    if closure_log is not None:
+        words.extend(("--closure-log", str(closure_log)))
     for name, path in bindings:
         words.extend(("--bind", f"{name}={path}"))
     result = invoke(*words, cwd=ROOT)
@@ -43,7 +52,7 @@ def main() -> int:
         goal_input = read_json(work / "Goal-input.json")
         goal = read_json(work / "goal.json")
         require("source_refs" not in goal_input and "source_refs" in goal["document"], "Goal source closure is not Tool-owned")
-        require(all(name in goal["document"] for name in ("decision_basis", "change_surface", "boundary_feasibility")), "Goal omitted launch-decision evidence")
+        require(all(name in goal["document"] for name in ("decision_basis", "change_contract", "boundary_feasibility", "closure_policy")), "Goal omitted launch-decision evidence")
         bad_goal = copy.deepcopy(goal_input)
         bad_goal["source_refs"] = ["caller://source"]
         refuse_materialize("k4-goal", bad_goal, work / "never-goal.json", [("observe", work / "observe0.json")])
@@ -80,15 +89,22 @@ def main() -> int:
         finish = read_json(work / "finish.json")
         require("source_refs" not in finish_input and "items" not in finish_input, "Finish caller still maintains formatted Account closure")
         require("comparison_refs" not in finish_input["acceptance_results"][0], "Finish caller still supplies its comparison scale")
-        require(finish["document"]["account"]["source_refs"] == ["run://ledger", "asset://repo"], "Finish Account source closure was not derived")
-        require("accept://result" in finish["document"]["closure"]["closure_source_refs"], "Finish closure sources were not separated")
+        require(finish["document"]["account"]["source_refs"] == ["evidence://finish-verification", "asset://repo"], "Finish Account source closure was not derived")
+        require("evidence://finish-verification" in finish["document"]["closure"]["closure_source_refs"], "Finish closure sources were not separated")
+        require("closure_actions" not in finish_input and len(finish["document"]["closure"]["closure_actions"]) == 1, "Finish closure actions were not ledger-derived")
         require("comparison_contract" in finish["document"]["closure"]["acceptance_results"][0], "Finish did not project the Goal comparison contract")
         bad_finish = copy.deepcopy(finish_input)
         bad_finish["source_refs"] = ["caller://source"]
         refuse_materialize(
             "k4-finish", bad_finish, work / "never-finish.json",
-            [("previous_account", work / "observe0.json"), ("goal", work / "goal.json"), ("plan", work / "plan.json")],
+            [
+                ("previous_account", work / "observe0.json"),
+                ("goal", work / "goal.json"),
+                ("plan", work / "plan.json"),
+                ("run", work / "run-projection.json"),
+            ],
             work / "run.jsonl",
+            work / "finish-closure.jsonl",
         )
         print("PASS Finish semantic settlement and split derived source closures")
 

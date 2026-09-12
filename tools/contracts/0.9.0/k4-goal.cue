@@ -102,17 +102,6 @@ context: _
 	budget:                    #Text
 	maximum_side_effects:      #NonEmptyStrings
 })
-#ClosureActionKind: "verify" | "cleanup" | "release" | "rollback" | "compensate" | "package"
-#ClosurePolicy: close({
-	maximum_actions: uint
-	allowed_kinds: [...#ClosureActionKind] & list.UniqueItems()
-	available_tools:      #Strings
-	permission_refs:      #Strings
-	read_refs:            #Strings
-	write_refs:           #Strings
-	resources:            #Strings
-	maximum_side_effects: #Strings
-})
 #Cutoff: close({
 	at:            #Text
 	included_refs: #NonEmptyStrings
@@ -126,23 +115,13 @@ context: _
 	confidence:        number & >=0 & <=1
 	basis_refs:        #NonEmptyStrings
 })
-#BoundaryState: close({
-	position_ref: #Text
-	state:        "open" | "bounded" | "frozen"
-	rationale:    #Text
-})
-#SingleFacetConstraint: close({
-	kind:      "single-facet"
-	facet_ref: #Text
-	incident_boundaries: [#BoundaryState, #BoundaryState, #BoundaryState, #BoundaryState, #BoundaryState, #BoundaryState]
-})
-#ChangeContract: close({
+#ChangeSurface: close({
+	primary_facet:      #Text
 	direct_change:      #Text
-	direct_positions:   #NonEmptyStrings
+	open_boundaries:    #Strings
+	bounded_boundaries: #Strings
+	frozen_boundaries:  #Strings
 	derivative_effects: #Strings
-	affected_positions: #Strings
-	frozen_positions:   #Strings
-	specialization:     null | #SingleFacetConstraint
 })
 #FeasibilityCriterion: "subject-boundary" | "account-sufficiency" | "change-surface" | "execution-envelope" | "downside-control" | "terminal-observability" | "failure-stop"
 #FeasibilityCheck: close({
@@ -164,14 +143,13 @@ context: _
 	selection_rationale:  #Text
 	target:               #Text
 	decision_basis:       #DecisionBasis
-	change_contract:      #ChangeContract
+	change_surface:       #ChangeSurface
 	boundary_feasibility: #BoundaryFeasibility
 	evidence_cutoff:      #Cutoff
 	baseline_refs:        #NonEmptyStrings
 	scope:                #NonEmptyStrings
 	non_goals: *[] | #Strings
 	execution_envelope: #ExecutionEnvelope
-	closure_policy:     #ClosurePolicy
 	acceptance_points: [...#PointInput]
 	control_contracts: *[] | [...#ControlInput]
 	blockers: *[] | #Strings
@@ -185,7 +163,7 @@ context: _
 	selection_rationale:   #Text
 	target:                #Text
 	decision_basis:        #DecisionBasis
-	change_contract:       #ChangeContract
+	change_surface:        #ChangeSurface
 	boundary_feasibility:  #BoundaryFeasibility
 	source_refs:           #NonEmptyStrings
 	evidence_cutoff:       #Cutoff
@@ -193,7 +171,6 @@ context: _
 	scope:                 #NonEmptyStrings
 	non_goals:             #Strings
 	execution_envelope:    #ExecutionEnvelope
-	closure_policy:        #ClosurePolicy
 	acceptance_points: [...#Point]
 	control_contracts: [...#Control]
 	blockers: #Strings
@@ -201,7 +178,7 @@ context: _
 	status:   "frozen" | "not-frozen"
 })
 #Envelope: close({
-	schema:            "k4-goal-document/v8"
+	schema:            "k4-goal-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({observe: #Binding})
@@ -244,32 +221,6 @@ _generateChecks: {
 	for criterion in _requiredFeasibilityCriteria {
 		if !list.Contains(_feasibilityCriteria, criterion) {_invalid: error("boundary_feasibility.checks: must cover every required criterion exactly once")}
 	}
-	for ref in _input.change_contract.direct_positions {
-		if list.Contains(_input.change_contract.frozen_positions, ref) {_invalid: error("change_contract: a direct position cannot also be frozen")}
-	}
-	for ref in _input.change_contract.affected_positions {
-		if list.Contains(_input.change_contract.direct_positions, ref) {_invalid: error("change_contract: direct_positions and affected_positions must be disjoint")}
-		if list.Contains(_input.change_contract.frozen_positions, ref) {_invalid: error("change_contract: an affected position cannot also be frozen")}
-	}
-	if _input.change_contract.specialization != null {
-		_specialization: _input.change_contract.specialization
-		if !list.Contains(_input.change_contract.direct_positions, _specialization.facet_ref) {_invalid: error("change_contract.specialization.facet_ref: must be a direct position")}
-		_incidentRefs: [for boundary in _specialization.incident_boundaries {boundary.position_ref}]
-		_incidentUnique: list.UniqueItems(_incidentRefs) & true
-		_openOrBounded: [for boundary in _specialization.incident_boundaries if boundary.state != "frozen" {boundary}]
-		if len(_openOrBounded) == 0 {_invalid: error("change_contract.specialization.incident_boundaries: at least one boundary must be open or bounded")}
-	}
-	for kind in _input.closure_policy.allowed_kinds {
-		if _input.closure_policy.maximum_actions == 0 {_invalid: error("closure_policy.allowed_kinds: must be empty when maximum_actions is zero")}
-	}
-	if _input.closure_policy.maximum_actions > 0 && len(_input.closure_policy.allowed_kinds) == 0 {_invalid: error("closure_policy.allowed_kinds: required when closure actions are allowed")}
-	if _input.closure_policy.maximum_actions > 0 && len(_input.closure_policy.available_tools) == 0 {_invalid: error("closure_policy.available_tools: required when closure actions are allowed")}
-	for ref in _input.closure_policy.available_tools {if !list.Contains(_input.execution_envelope.available_tools, ref) {_invalid: error("closure_policy.available_tools: every tool must be allowed by the execution envelope")}}
-	for ref in _input.closure_policy.permission_refs {if !list.Contains(_input.execution_envelope.permission_refs, ref) {_invalid: error("closure_policy.permission_refs: every permission must be allowed by the execution envelope")}}
-	for ref in _input.closure_policy.read_refs {if !list.Contains(_input.execution_envelope.read_refs, ref) {_invalid: error("closure_policy.read_refs: every read position must be allowed by the execution envelope")}}
-	for ref in _input.closure_policy.write_refs {if !list.Contains(_input.execution_envelope.write_refs, ref) {_invalid: error("closure_policy.write_refs: every write position must be allowed by the execution envelope")}}
-	for ref in _input.closure_policy.resources {if !list.Contains(_input.execution_envelope.resources, ref) {_invalid: error("closure_policy.resources: every resource must be allowed by the execution envelope")}}
-	for ref in _input.closure_policy.maximum_side_effects {if !list.Contains(_input.execution_envelope.maximum_side_effects, ref) {_invalid: error("closure_policy.maximum_side_effects: every effect must be allowed by the execution envelope")}}
 	if _status == "frozen" && len(_points) == 0 {_invalid: error("acceptance_points: a frozen Goal requires at least one acceptance point")}
 	for judge in list.Concat([
 		[for point in _input.acceptance_points {point.judge}],
@@ -321,7 +272,7 @@ _document: #Document & {
 	selection_rationale:   _input.selection_rationale
 	target:                _input.target
 	decision_basis:        _input.decision_basis
-	change_contract:       _input.change_contract
+	change_surface:        _input.change_surface
 	boundary_feasibility:  _input.boundary_feasibility
 	source_refs:           _sourceRefs
 	evidence_cutoff:       _input.evidence_cutoff
@@ -329,7 +280,6 @@ _document: #Document & {
 	scope:                 _input.scope
 	non_goals:             _input.non_goals
 	execution_envelope:    _input.execution_envelope
-	closure_policy:        _input.closure_policy
 	acceptance_points:     _points
 	control_contracts:     _controls
 	blockers:              _input.blockers
@@ -338,7 +288,7 @@ _document: #Document & {
 }
 
 generate: _generateChecks & close({
-	schema: "k4-goal-document/v8"
+	schema: "k4-goal-document/v7"
 	bindings: close({observe: _observe.binding})
 	document: _document
 })
@@ -365,30 +315,6 @@ _validateChecks: {
 	if len(_existing.document.blockers) == 0 && len(_existingFailedFeasibility) == 0 && _existing.document.status != "frozen" {_invalid: error("status: an unblocked feasible Goal must be frozen")}
 	if len(_existingFailedFeasibility) > 0 && _existing.document.status != "not-frozen" {_invalid: error("status: failed boundary feasibility requires not-frozen")}
 	if _existing.document.status == "frozen" && len(_existing.document.acceptance_points) == 0 {_invalid: error("acceptance_points: a frozen Goal requires at least one acceptance point")}
-	for ref in _existing.document.change_contract.direct_positions {
-		if list.Contains(_existing.document.change_contract.frozen_positions, ref) {_invalid: error("change_contract: a direct position cannot also be frozen")}
-	}
-	for ref in _existing.document.change_contract.affected_positions {
-		if list.Contains(_existing.document.change_contract.direct_positions, ref) {_invalid: error("change_contract: direct_positions and affected_positions must be disjoint")}
-		if list.Contains(_existing.document.change_contract.frozen_positions, ref) {_invalid: error("change_contract: an affected position cannot also be frozen")}
-	}
-	if _existing.document.change_contract.specialization != null {
-		_specialization: _existing.document.change_contract.specialization
-		if !list.Contains(_existing.document.change_contract.direct_positions, _specialization.facet_ref) {_invalid: error("change_contract.specialization.facet_ref: must be a direct position")}
-		_incidentRefs: [for boundary in _specialization.incident_boundaries {boundary.position_ref}]
-		_incidentUnique: list.UniqueItems(_incidentRefs) & true
-		_openOrBounded: [for boundary in _specialization.incident_boundaries if boundary.state != "frozen" {boundary}]
-		if len(_openOrBounded) == 0 {_invalid: error("change_contract.specialization.incident_boundaries: at least one boundary must be open or bounded")}
-	}
-	if _existing.document.closure_policy.maximum_actions == 0 && len(_existing.document.closure_policy.allowed_kinds) != 0 {_invalid: error("closure_policy.allowed_kinds: must be empty when maximum_actions is zero")}
-	if _existing.document.closure_policy.maximum_actions > 0 && len(_existing.document.closure_policy.allowed_kinds) == 0 {_invalid: error("closure_policy.allowed_kinds: required when closure actions are allowed")}
-	if _existing.document.closure_policy.maximum_actions > 0 && len(_existing.document.closure_policy.available_tools) == 0 {_invalid: error("closure_policy.available_tools: required when closure actions are allowed")}
-	for ref in _existing.document.closure_policy.available_tools {if !list.Contains(_existing.document.execution_envelope.available_tools, ref) {_invalid: error("closure_policy.available_tools: every tool must be allowed by the execution envelope")}}
-	for ref in _existing.document.closure_policy.permission_refs {if !list.Contains(_existing.document.execution_envelope.permission_refs, ref) {_invalid: error("closure_policy.permission_refs: every permission must be allowed by the execution envelope")}}
-	for ref in _existing.document.closure_policy.read_refs {if !list.Contains(_existing.document.execution_envelope.read_refs, ref) {_invalid: error("closure_policy.read_refs: every read position must be allowed by the execution envelope")}}
-	for ref in _existing.document.closure_policy.write_refs {if !list.Contains(_existing.document.execution_envelope.write_refs, ref) {_invalid: error("closure_policy.write_refs: every write position must be allowed by the execution envelope")}}
-	for ref in _existing.document.closure_policy.resources {if !list.Contains(_existing.document.execution_envelope.resources, ref) {_invalid: error("closure_policy.resources: every resource must be allowed by the execution envelope")}}
-	for ref in _existing.document.closure_policy.maximum_side_effects {if !list.Contains(_existing.document.execution_envelope.maximum_side_effects, ref) {_invalid: error("closure_policy.maximum_side_effects: every effect must be allowed by the execution envelope")}}
 	for judge in list.Concat([
 		[for point in _existing.document.acceptance_points {point.judge}],
 		[for control in _existing.document.control_contracts {control.judge}],

@@ -1,7 +1,7 @@
 # K4 Work Cycle Agent Extension
 
-This Resource packages five responsibilities over four storage strategies as
-peer Agent Skills:
+This Resource packages one independently iterable observation responsibility
+and one four-stage change transaction as five peer Agent Skills:
 
 - `k4-observe`: creates the multi-lens opening Account and gap/opportunity report;
 - `k4-goal`: freezes one flat mandate of acceptance and operating limits;
@@ -9,9 +9,11 @@ peer Agent Skills:
 - `k4-run`: appends operation, emergency-patch, and halt facts to the journal;
 - `k4-finish`: reconciles the journal into the closing Account and stage report.
 
-Observe and Finish share the Account storage strategy but remain separate
-temporal responsibilities. The retained trace supports later independent audit;
-no internal stage becomes that audit by implication.
+Observe may iterate the Account and stop without producing a Goal. The bounded
+transaction begins at Goal and ends at Finish. Observe and Finish share the
+Account storage strategy but remain separate temporal responsibilities. The
+retained trace supports later independent audit; no internal stage becomes that
+audit by implication.
 
 Read [`WORKFLOW.md`](./WORKFLOW.md) for semantics and
 [`DESIGN.md`](./DESIGN.md) for implementation boundaries. See
@@ -31,6 +33,7 @@ tools/migrate-0.4.1-to-0.5.0
 tools/migrate-0.5.0-to-0.6.0
 tools/contracts/0.5.0/
 tools/contracts/0.8.0/
+tools/contracts/0.9.0/
 skills/
   k4-observe/{SKILL.md,assets/,references/,scripts/}
   k4-goal/{SKILL.md,assets/,references/,scripts/}
@@ -48,9 +51,13 @@ stage-neutral; every Skill supplies its own CUE contract.
 
 ## Mechanical interface
 
-Skill-local scripts are the public entrypoints. Observe, Goal, Plan, and Finish
-materialize immutable documents. Run appends one event, projects its ledger,
-and validates either the ledger or its derived projection. Every stable JSON or
+Skill-local scripts are the public entrypoints. Observe, Goal, and Plan
+materialize immutable documents. Run appends and projects its execution ledger;
+Finish appends zero or more closure actions and one explicit terminal halt,
+projects the closure ledger, then materializes the final settlement from both
+exact ledgers. An open closure ledger cannot settle, and no event may follow
+its halt. Both ledger Skills can validate their source
+history or derived projection. Every stable JSON or
 JSONL output is Tool-generated; semantic input remains a temporary work product.
 The Observe-iteration and Finish-settlement interfaces accept changed,
 added, and retired Account semantics without requiring the complete Account.
@@ -63,6 +70,17 @@ before projecting the closing Account; a closing item cannot retain
 `goal-candidate`. It generates omitted terminal-control results only when the
 bound Goal has none. Run generates fixed patch metadata, but an emergency patch
 must still supply at least one actual Finding.
+
+Release `0.10.0` corrects the stage responsibilities calibrated after `0.9.0`.
+Goal now freezes a task-native change contract rather than requiring every task
+to pretend it has one primary facet; the seven-position single-facet model is an
+optional specialization. Goal separately authorizes a bounded Finish closure
+subset. Plan, not Run, owns any one-shot operation-local emergency-patch seam.
+Finish records actual closure work and its explicit terminal halt in its own append-only ledger and accepts
+settlement evidence only from the opening Account, actual Run, or actual Finish
+closure. The public chain is Observe v3, Goal v8, Plan v9, Run
+event/projection v8, Finish closure event/projection v1, and Finish v6. Exact
+`0.9.0` contracts remain frozen under `tools/contracts/0.9.0/`.
 
 Release `0.9.0` changes the public stable chain to Observe v3, Goal v7, Plan v8,
 Run event/projection v7, and Finish v5. It adds Observe completeness/indexes,

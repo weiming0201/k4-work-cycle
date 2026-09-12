@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""Validate a Finish closure ledger or final settlement with both source logs."""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+def tool_path(skill_dir: Path) -> str | None:
+    configured = os.environ.get("K4_STABLE_RESULT")
+    if configured:
+        return configured
+    found = shutil.which("stable-result")
+    if found:
+        return found
+    for candidate in (skill_dir.parent.parent / "tools" / "stable-result", skill_dir.parent.parent / "workspace" / "tools" / "stable-result"):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def parse() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Validate a Finish closure ledger or final settlement.")
+    target = parser.add_mutually_exclusive_group(required=True)
+    target.add_argument("--log", help="append-only Finish closure JSONL")
+    target.add_argument("--document", help="existing Finish settlement document")
+    parser.add_argument("--run-log", help="exact Run JSONL, required with --document")
+    parser.add_argument("--closure-log", help="exact Finish closure JSONL, required with --document")
+    parser.add_argument("--bind", action="append", default=[], metavar="NAME=FILE")
+    return parser.parse_args()
+
+
+def binding_map(words: list[str]) -> dict[str, str]:
+    result: dict[str, str] = {}
+    for word in words:
+        if "=" not in word:
+            raise ValueError(f"binding must be NAME=FILE: {word}")
+        name, path = word.split("=", 1)
+        if not name or name in result:
+            raise ValueError(f"duplicate or empty binding: {name!r}")
+        result[name] = path
+    return result
+
+
+def main() -> int:
+    args = parse()
+    skill_dir = Path(__file__).resolve().parents[1]
+    tool = tool_path(skill_dir)
+    if tool is None:
+        print("stable-result is not available", file=sys.stderr)
+        return 1
+    try:
+        bound = binding_map(args.bind)
+        for required in ("previous_account", "goal", "plan", "run"):
+            if required not in bound:
+                raise ValueError(f"--bind {required}=FILE is required")
+    except ValueError as error:
+        print(str(error), file=sys.stderr)
+        return 1
+
+    common = [item for word in args.bind for item in ("--bind", word)]
+    contract = str(skill_dir / "assets" / "protocol.cue")
+    if args.log is not None:
+        return subprocess.run(
+            [tool, "--contract", contract, "validate", "--expression",
+             "validate_closure_log", "--log", args.log, *common], check=False,
+        ).returncode
+
+    if args.run_log is None or args.closure_log is None:
+        print("--run-log FILE and --closure-log FILE are required with --document", file=sys.stderr)
+        return 1
+    run_log = Path(args.run_log)
+    closure_log = Path(args.closure_log)
+    if not run_log.is_file():
+        print(f"run log does not exist: {run_log}", file=sys.stderr)
+        return 1
+    if not closure_log.is_file():
+        print(f"closure log does not exist: {closure_log}", file=sys.stderr)
+        return 1
+    run_check = subprocess.run(
+        [str(skill_dir.parent / "k4-run" / "scripts" / "validate"),
+         "--document", bound["run"], "--source-log", str(run_log),
+         "--bind", f"goal={bound['goal']}", "--bind", f"plan={bound['plan']}"],
+        check=False,
+    )
+    if run_check.returncode != 0:
+        return run_check.returncode
+
+    try:
+        with tempfile.TemporaryDirectory(prefix="k4-finish-validate-") as directory:
+            temporary = Path(directory)
+            projection_path = temporary / "closure.json"
+            projected = subprocess.run(
+                [tool, "--contract", contract, "project", "--expression", "project_closure",
+                 "--log", str(closure_log), "--output", str(projection_path), *common],
+                check=False,
+            )
+            if projected.returncode != 0:
+                return projected.returncode
+            projection = json.loads(projection_path.read_text())["document"]
+            document = json.loads(Path(args.document).read_text())
+            closure = document["document"]["closure"]
+            closure_bytes = closure_log.read_bytes()
+            run_bytes = run_log.read_bytes()
+            expected = {
+                "closure_actions": projection["actions"],
+                "closure_halt": projection["halt"],
+                "closure_head_event_sha256": projection["ledger_head_event_sha256"],
+                "closure_log_sha256": hashlib.sha256(closure_bytes).hexdigest(),
+                "closure_log_ref": f"k4-finish-closure-event/v1@jsonl#sha256={hashlib.sha256(closure_bytes).hexdigest()}",
+                "run_log_sha256": hashlib.sha256(run_bytes).hexdigest(),
+                "run_log_ref": f"k4-run-event/v8@jsonl#sha256={hashlib.sha256(run_bytes).hexdigest()}",
+            }
+            for field, value in expected.items():
+                if closure.get(field) != value:
+                    raise ValueError(f"document.closure.{field} does not match its source ledger")
+            return subprocess.run(
+                [tool, "--contract", contract, "validate", "--expression", "validate",
+                 "--document", args.document, *common], check=False,
+            ).returncode
+    except (OSError, KeyError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"ok": False, "error": str(error)}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

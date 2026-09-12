@@ -1,13 +1,17 @@
 # Finish document protocol
 
 Finish materializes one closing Account plus a closure report for one exact
-halted attempt. It binds the opening Account, Goal, Plan, and exact Run ledger;
-the Run projection used for settlement is derived mechanically from that ledger.
+halted attempt. It binds the opening Account, Goal, Plan, halted Run projection,
+and exact Run ledger from which that projection is mechanically derived.
 
 The caller supplies a closing semantic delta (updates, additions, and
-retirements), actual acceptance and terminal-control judgments, closure
-actions, attribution, residual effects, result disposition, and failure-only
-incomplete content. The Tool carries every unmentioned predecessor forward
+retirements), actual acceptance and terminal-control judgments, attribution,
+residual effects, result disposition, and failure-only incomplete content. Each
+closure action is first appended to a separate ledger under Goal's exact
+closure policy. One separate halt event terminates that ledger after zero or
+more actions; it consumes no action allowance and no event may follow it. An
+open ledger can be projected for recovery but cannot materialize Finish. The
+Tool carries every unmentioned predecessor forward
 and derives separate Account and closure sources, continuity, Goal-owned judge
 and comparison contracts, and canonical empty/null fields.
 
@@ -31,7 +35,8 @@ subject, boundary, cutoff, sources, lenses, generated lens index, delta,
 current retained/changed/added items, retired predecessors, identities, and
 exact predecessor binding. Subject, boundary, and lenses remain unchanged.
 
-Closure is the stage report. It adds one pass/fail judgment for every Goal
+Closure is the stage report. It projects the immutable closure ledger's actions
+and terminal halt, and adds one pass/fail judgment for every Goal
 acceptance point and terminal control with the exact judge and comparison
 contract frozen by Goal, actual Finish closure actions, attribution, residual
 effects, result disposition, incomplete package, and exact journal reference.
@@ -41,7 +46,10 @@ derived Run projection. Unknown is an annotation, not a third routing result.
 
 Account sources contain only evidence that supports Account items and
 retirements. Closure-only evidence has its own derived source closure, so
-settlement evidence does not silently become an Account fact.
+settlement evidence does not silently become an Account fact. Every Account or
+judgment reference must be closed over three admissible origins: the opening
+Account, actual Run evidence, or actual Finish closure evidence. A newly found
+external source enters only through the next Observe.
 
 For an aborted attempt, closure also derives the confirmation source and
 reason, the Plan's response mode, planned and actual abort-response operations,

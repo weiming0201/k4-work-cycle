@@ -37,17 +37,6 @@ context: _
 		check_ref:                  #Text
 		judge: {kind: #Text, ref: #Text, claim_limit: #Text}
 	}
-	emergency_patch: null | close({
-		trigger:              #Text
-		tool_refs:            #NonEmptyStrings
-		permission_refs:      #Strings
-		read_refs:            #Strings
-		write_refs:           #NonEmptyStrings
-		resource_refs:        #Strings
-		maximum_side_effects: #NonEmptyStrings
-		maximum_attempts:     1
-		return_operation_id:  #OperationID
-	})
 	on_result: close({
 		pass: close({next_operation_ids: [...#OperationID], reason: #Text})
 		fail: close({next_operation_ids: [...#OperationID], reason: #Text})
@@ -60,7 +49,7 @@ context: _
 	...
 }
 #GoalEnvelope: {
-	schema:            "k4-goal-document/v8"
+	schema:            "k4-goal-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -80,7 +69,7 @@ context: _
 	}
 }
 #PlanEnvelope: {
-	schema:            "k4-plan-document/v9"
+	schema:            "k4-plan-document/v8"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {goal: #Binding}
@@ -142,26 +131,6 @@ context: _
 	findings: [...#Finding]
 	unknowns: [...#Unknown]
 })
-#PatchInput: close({
-	kind:                    "emergency-patch"
-	operation_id:            #OperationID
-	attempt:                 1
-	application_result:      "applied" | "not-applied"
-	reason:                  #Text
-	script_ref:              #Text
-	tool_refs:               #NonEmptyStrings
-	permission_refs:         #NonEmptyStrings
-	read_refs:               #Strings
-	write_refs:              #NonEmptyStrings
-	resource_refs:           #NonEmptyStrings
-	maximum_side_effects:    #NonEmptyStrings
-	actual_side_effect_refs: #NonEmptyStrings
-	evidence_refs:           #NonEmptyStrings
-	trace_refs:              #NonEmptyStrings
-	findings: [#Finding, ...#Finding]
-	unknowns: [...#Unknown]
-	verification_scope: "mainline-resumption-only"
-})
 #PatchEvent: close({
 	kind:                    "emergency-patch"
 	operation_id:            #OperationID
@@ -181,17 +150,6 @@ context: _
 	findings: [#Finding, ...#Finding]
 	unknowns: [...#Unknown]
 	verification_scope: "mainline-resumption-only"
-	authorized_policy: close({
-		trigger:              #Text
-		tool_refs:            #NonEmptyStrings
-		permission_refs:      #Strings
-		read_refs:            #Strings
-		write_refs:           #NonEmptyStrings
-		resource_refs:        #Strings
-		maximum_side_effects: #NonEmptyStrings
-		maximum_attempts:     1
-		return_operation_id:  #OperationID
-	})
 })
 #AbortConfirmedEvent: close({
 	kind:               "abort-confirmed"
@@ -209,10 +167,10 @@ context: _
 	evidence_refs:             #NonEmptyStrings
 	resume_ref:                null | #Text
 })
-#EventInput: #OperationInput | #PatchInput | #AbortConfirmedEvent | #HaltEvent
+#EventInput: #OperationInput | #PatchEvent | #AbortConfirmedEvent | #HaltEvent
 #Event:      #OperationEvent | #PatchEvent | #AbortConfirmedEvent | #HaltEvent
 #EventEnvelope: close({
-	schema:                "k4-run-event/v8"
+	schema:                "k4-run-event/v7"
 	sequence:              uint
 	recorded_unix_ms:      uint
 	previous_event_sha256: null | #Digest
@@ -351,19 +309,12 @@ _publicLedgerChecks: {
 				if len([for prior in _events if prior.sequence < envelope.sequence if prior.event.kind == "operation-result" if prior.event.operation_id == dependency {prior}]) != 1 {_invalid: error("emergency patch requires all Plan dependencies to have responses")}
 			}
 		}
-		if list.Contains(_operationIDs, envelope.event.operation_id) {
-			_policy: _operationByID[envelope.event.operation_id].emergency_patch
-			if _policy == null {_invalid: error("emergency patch is not licensed by the owning Plan operation")}
-			if _policy != null {
-				if envelope.event.authorized_policy != _policy {_invalid: error("emergency patch must preserve the exact Plan-owned patch policy")}
-				for ref in envelope.event.tool_refs {if !list.Contains(_policy.tool_refs, ref) {_invalid: error("emergency-patch.tool_refs: outside the Plan operation patch seam")}}
-				for ref in envelope.event.permission_refs {if !list.Contains(_policy.permission_refs, ref) {_invalid: error("emergency-patch.permission_refs: outside the Plan operation patch seam")}}
-				for ref in envelope.event.read_refs {if !list.Contains(_policy.read_refs, ref) {_invalid: error("emergency-patch.read_refs: outside the Plan operation patch seam")}}
-				for ref in envelope.event.write_refs {if !list.Contains(_policy.write_refs, ref) {_invalid: error("emergency-patch.write_refs: outside the Plan operation patch seam")}}
-				for ref in envelope.event.resource_refs {if !list.Contains(_policy.resource_refs, ref) {_invalid: error("emergency-patch.resource_refs: outside the Plan operation patch seam")}}
-				for effect in envelope.event.maximum_side_effects {if !list.Contains(_policy.maximum_side_effects, effect) {_invalid: error("emergency-patch.maximum_side_effects: outside the Plan operation patch seam")}}
-			}
-		}
+		for ref in envelope.event.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("emergency-patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("emergency-patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("emergency-patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("emergency-patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
+		for ref in envelope.event.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("emergency-patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+		for effect in envelope.event.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("emergency-patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	}
 	for envelope in _abortConfirmedEvents {
 		_priorOperationEvents: [for prior in _operationEvents if prior.sequence < envelope.sequence {prior}]
@@ -427,18 +378,12 @@ _publicCandidateChecks: {
 				if len([for prior in _operationEvents if prior.event.operation_id == dependency {prior}]) != 1 {_invalid: error("emergency patch requires all Plan dependencies to have responses")}
 			}
 		}
-		if list.Contains(_operationIDs, _input.operation_id) {
-			_policy: _operationByID[_input.operation_id].emergency_patch
-			if _policy == null {_invalid: error("emergency patch is not licensed by the owning Plan operation")}
-			if _policy != null {
-				for ref in _input.tool_refs {if !list.Contains(_policy.tool_refs, ref) {_invalid: error("emergency-patch.tool_refs: outside the Plan operation patch seam")}}
-				for ref in _input.permission_refs {if !list.Contains(_policy.permission_refs, ref) {_invalid: error("emergency-patch.permission_refs: outside the Plan operation patch seam")}}
-				for ref in _input.read_refs {if !list.Contains(_policy.read_refs, ref) {_invalid: error("emergency-patch.read_refs: outside the Plan operation patch seam")}}
-				for ref in _input.write_refs {if !list.Contains(_policy.write_refs, ref) {_invalid: error("emergency-patch.write_refs: outside the Plan operation patch seam")}}
-				for ref in _input.resource_refs {if !list.Contains(_policy.resource_refs, ref) {_invalid: error("emergency-patch.resource_refs: outside the Plan operation patch seam")}}
-				for effect in _input.maximum_side_effects {if !list.Contains(_policy.maximum_side_effects, effect) {_invalid: error("emergency-patch.maximum_side_effects: outside the Plan operation patch seam")}}
-			}
-		}
+		for ref in _input.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("emergency-patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
+		for ref in _input.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("emergency-patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
+		for ref in _input.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("emergency-patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
+		for ref in _input.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("emergency-patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
+		for ref in _input.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("emergency-patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
+		for effect in _input.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("emergency-patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
 	}
 	if _input.kind == "abort-confirmed" {
 		if len(_abortConfirmedEvents) != 0 {_invalid: error("Run may confirm abort only once")}
@@ -498,7 +443,6 @@ if _input.kind == "emergency-patch" {
 		findings:                _input.findings
 		unknowns:                _input.unknowns
 		verification_scope:      _input.verification_scope
-		authorized_policy:       _operationByID[_input.operation_id].emergency_patch
 	})
 }
 if _input.kind == "abort-confirmed" {
@@ -523,7 +467,7 @@ if _input.kind == "halt" {
 }
 
 next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
-	schema:   "k4-run-event/v8"
+	schema:   "k4-run-event/v7"
 	bindings: _bindings
 	event:    _generatedEvent
 })
@@ -539,17 +483,6 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 	trace_refs:         #Strings
 	findings: [...#Finding]
 	unknowns: [...#Unknown]
-	authorized_policy: close({
-		trigger:              #Text
-		tool_refs:            #NonEmptyStrings
-		permission_refs:      #Strings
-		read_refs:            #Strings
-		write_refs:           #NonEmptyStrings
-		resource_refs:        #Strings
-		maximum_side_effects: #NonEmptyStrings
-		maximum_attempts:     1
-		return_operation_id:  #OperationID
-	})
 })
 #ProjectedAbortConfirmation: close({
 	event_sequence:     uint
@@ -585,7 +518,6 @@ next_event: _planChecks & _publicLedgerChecks & _publicCandidateChecks & close({
 	resource_refs:           #NonEmptyStrings
 	maximum_side_effects:    #NonEmptyStrings
 	actual_side_effect_refs: #NonEmptyStrings
-	evidence_refs:           #NonEmptyStrings
 	trace_refs:              #NonEmptyStrings
 	findings: [#Finding, ...#Finding]
 	unknowns: [...#Unknown]
@@ -636,11 +568,9 @@ _patchProjection: [for envelope in _patchEvents {close({
 	resource_refs:           envelope.event.resource_refs
 	maximum_side_effects:    envelope.event.maximum_side_effects
 	actual_side_effect_refs: envelope.event.actual_side_effect_refs
-	evidence_refs:           envelope.event.evidence_refs
 	trace_refs:              envelope.event.trace_refs
 	findings:                envelope.event.findings
 	unknowns:                envelope.event.unknowns
-	authorized_policy:       envelope.event.authorized_policy
 })
 }]
 _invariantObservations: [for control in _goal.value.document.control_contracts if control.check_timing == "invariant" {
@@ -711,7 +641,7 @@ if len(_events) > 0 {
 }
 
 project: _planChecks & _publicLedgerChecks & close({
-	schema:   "k4-run-projection/v8"
+	schema:   "k4-run-projection/v7"
 	bindings: _bindings
 	document: close({
 		operations:                _operationProjection
@@ -729,7 +659,7 @@ project: _planChecks & _publicLedgerChecks & close({
 })
 
 _existingProjection: context.existing & {
-	schema:            "k4-run-projection/v8"
+	schema:            "k4-run-projection/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings:          _bindings

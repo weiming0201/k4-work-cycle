@@ -1,5 +1,24 @@
 # Versioned migration
 
+## 0.9.0 to 0.10.0
+
+Release `0.10.0` changes semantic responsibility and therefore never
+reinterprets an existing `0.9.0` chain. Existing Goal v7, Plan v8, Run v7, and
+Finish v5 work remains governed by the exact contracts in
+`tools/contracts/0.9.0/`; settle an already-running chain there, then begin the
+next Account revision with the current entrypoints.
+
+The new obligations cannot be derived safely from old artifacts. A caller must
+decide the task-native direct, affected, and frozen positions; any optional
+single-facet specialization; the exact Finish closure allowance; which Plan
+operations possess an emergency-patch seam; and which actual Finish closure
+actions occurred. A new Finish closure ledger also requires one explicit final
+halt after zero or more actions; terminality is not inferred from an absent next
+event. Finish v6 also rejects settlement evidence that cannot be
+traced to the opening Account, Run ledger, or Finish closure ledger. Because
+these are semantic decisions and actual historical facts, this release provides
+no automatic migration Tool.
+
 ## 0.8.0 to 0.9.0
 
 Release `0.9.0` introduces new stable semantic obligations and therefore does

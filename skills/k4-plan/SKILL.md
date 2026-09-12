@@ -33,6 +33,11 @@ Goal, execute an operation, or know which result will occur.
   Goal.
 - Freeze one Plan-level abort policy. Abort is an external or runtime inability
   to continue the graph, not a third operation result.
+- When one normal operation may need a one-shot repair of a foreseeable
+  execution omission, freeze that operation's emergency-patch seam: trigger,
+  tools, permissions, positions, resources, and effects. Omission means no
+  patch authority. The seam returns only to its owning operation and never
+  becomes another graph route.
 - Findings and unknowns are annotations, not routes. Coverage links operations
   to possible acceptance evidence; it does not declare any Goal point
   satisfied.
@@ -52,10 +57,10 @@ structure.
 ## Disposition
 
 The stable result is one selected executable Plan: normal entry, abort policy,
-finite partial-order graph, Goal coverage, operation envelopes, checks, and
-binary routes. It records possibilities only. Run consumes it and actual
-evidence selects a route. A semantic change to the process policy requires a
-new Plan.
+finite partial-order graph, Goal coverage, operation envelopes, optional local
+patch seams, checks, and binary routes. It records possibilities only. Run
+consumes it and actual evidence selects a route. A semantic change to the
+process policy requires a new Plan.
 
 Do not hand-author or patch stable JSON. Ordinary use does not require reading
 the CUE contract or Tool source. Correct named public omissions or

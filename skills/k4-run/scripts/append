@@ -29,8 +29,10 @@ Event input:
     resume_ref?}
 
 The Tool derives operation eligibility and the Plan-local judgment contract,
-fixes patch attempt and verification scope, derives abort/halt position and halt
-trigger from the ledger, and supplies canonical empty annotations.
+fixes patch attempt, verification scope, and the exact owning operation's patch
+policy, derives abort/halt position and halt trigger from the ledger, and
+supplies canonical empty annotations. A patch is refused when that operation
+did not freeze an emergency_patch seam or any actual boundary exceeds it.
 Actual execution facts, evidence, Findings, unknowns, effects, and resume facts
 remain semantic input. Explicit compatibility values must equal derived values.
 

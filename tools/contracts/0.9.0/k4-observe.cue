@@ -94,7 +94,7 @@ context: _
 	conflict_ids: [...#ItemID] & list.UniqueItems()
 	unknown_ids: [...#ItemID] & list.UniqueItems()
 	completeness: #Completeness
-	status:       "aligned" | "open"
+	status: "aligned" | "open"
 })
 #Document: close({
 	account:     #Account
@@ -108,7 +108,7 @@ context: _
 	document: #Document
 })
 #PreviousEnvelope: {
-	schema:            "k4-observe-document/v2" | "k4-observe-document/v3" | "k4-finish-document/v2" | "k4-finish-document/v3" | "k4-finish-document/v4" | "k4-finish-document/v5" | "k4-finish-document/v6"
+	schema:            "k4-observe-document/v2" | "k4-observe-document/v3" | "k4-finish-document/v2" | "k4-finish-document/v3" | "k4-finish-document/v4" | "k4-finish-document/v5"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -122,16 +122,16 @@ context: _
 	value:   null | #PreviousEnvelope
 })
 #BootstrapInput: close({
-	subject:      #Text
-	boundary:     #Text
-	cutoff:       #Text
-	delta:        #DeltaInput
+	subject:  #Text
+	boundary: #Text
+	cutoff:   #Text
+	delta:    #DeltaInput
 	completeness: #Completeness
 	additions: [#Addition, ...#Addition]
 })
 #IterationInput: close({
-	cutoff:       #Text
-	delta:        #DeltaInput
+	cutoff: #Text
+	delta:  #DeltaInput
 	completeness: #Completeness
 	updates: *[] | [...#Update]
 	additions: *[] | [...#Addition]
@@ -141,11 +141,11 @@ context: _
 _rawInput: context.input
 _previous: #Previous & context.bindings.previous_account
 _bindings: close({previous_account: null | #Binding})
-_mode:         "bootstrap" | "iterate"
-_subject:      #Text
-_boundary:     #Text
-_cutoff:       #Text
-_deltaInput:   #DeltaInput
+_mode:     "bootstrap" | "iterate"
+_subject:  #Text
+_boundary: #Text
+_cutoff:   #Text
+_deltaInput: #DeltaInput
 _completeness: #Completeness
 _updates: [...#Update]
 _additions: [...#Addition]
@@ -155,12 +155,12 @@ _previousLenses: [...#Text]
 if _previous.value == null {
 	if _previous.binding != null {_invalid: error("contract relation rejected: _previous.binding != null")}
 	_bindings: previous_account: null
-	_input:        #BootstrapInput & _rawInput
-	_mode:         "bootstrap"
-	_subject:      _input.subject
-	_boundary:     _input.boundary
-	_cutoff:       _input.cutoff
-	_deltaInput:   _input.delta
+	_input:    #BootstrapInput & _rawInput
+	_mode:     "bootstrap"
+	_subject:  _input.subject
+	_boundary: _input.boundary
+	_cutoff:   _input.cutoff
+	_deltaInput:    _input.delta
 	_completeness: _input.completeness
 	_updates: []
 	_additions: _input.additions
@@ -176,8 +176,8 @@ if _previous.value != null {
 	_subject:        _previous.value.document.account.subject
 	_boundary:       _previous.value.document.account.boundary
 	_cutoff:         _input.cutoff
-	_deltaInput:     _input.delta
-	_completeness:   _input.completeness
+	_deltaInput:          _input.delta
+	_completeness:       _input.completeness
 	_updates:        _input.updates
 	_additions:      _input.additions
 	_retirements:    _input.retirements

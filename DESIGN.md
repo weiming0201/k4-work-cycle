@@ -8,7 +8,8 @@ how the published Agent Extension realizes it without redefining the stages.
 The Resource publishes:
 
 1. one semantic authority, `WORKFLOW.md`;
-2. five peer Agent Skills: Observe, Goal, Plan, Run, and Finish;
+2. five peer Agent Skills: independently iterable Observe, plus the Goal,
+   Plan, Run, and Finish transaction;
 3. one stage-neutral deterministic Tool;
 4. one Skill-local CUE contract per Skill;
 5. one generated Manifest;
@@ -51,28 +52,35 @@ chain; later public schemas cannot silently alter that historical target.
   continuity, and generates the complete Account, lens index, gap/conflict/
   unknown indexes, completeness surface, and opening report.
 - Goal accepts one exact Observe Account and freezes one selected flat mandate,
-  including its decision basis, change surface, seven-part boundary-feasibility
-  review, selection rationale, exact execution envelope, and sourceable judge
-  identities. Its source inventory and canonical empty collections are derived.
+  including its decision basis, task-native change contract, seven-part
+  boundary-feasibility review, selection rationale, exact execution envelope,
+  Finish-only closure subset, and sourceable judge identities. A single-facet
+  topology is conditional rather than universal. Its source inventory and
+  canonical empty collections are derived.
 - Plan accepts one exact frozen Goal and freezes one selected forward binary
   operation DAG, including its selection rationale, topology projection, and
   Plan-level abort response.
   Roots, phases, join dependencies, identities, coverage, and topology are
   graph projections rather than caller-maintained fields. Every real operation
   owns structured preconditions, one complete local pass/fail judgment contract,
-  and explicit failure handling.
+  explicit failure handling, and an optional operation-local emergency-patch
+  seam.
   Every operational permission, position, resource, tool, and maximum effect
   is mechanically contained by the Goal envelope.
 - Run accepts one exact Goal, Plan, existing ledger, and candidate event. It
-  derives eligibility and the Plan-local judgment contract, validates graph
+  derives eligibility, the Plan-local judgment contract, and the exact
+  operation-owned patch seam; validates graph
   activation, and appends only operation, patch,
   abort-confirmation, or halt facts. Fixed patch fields and ledger-determined
   terminal fields are generated before append; an actual patch Finding is not
   generated and remains required semantic input.
-- Finish accepts the exact opening Account, Goal, Plan, and halted Run ledger.
-  Its semantic input is a closing Account delta plus actual judgments, closure
-  actions, attribution, residual effects and disposition. The Tool derives its
-  Run projection, complete next Account, separate Account/closure source sets,
+- Finish accepts the exact opening Account, Goal, Plan, halted Run projection,
+  Run ledger, and its own append-only closure ledger. Its one-shot semantic
+  input is a closing Account delta plus actual judgments, attribution, residual
+  effects and disposition; closure actions and one explicit terminal halt come
+  only from the ledger. Zero actions remain legal, but an open ledger cannot
+  settle and a halted ledger accepts no later event. The Tool
+  derives the complete next Account and bounded Account/closure source sets,
   settlement report, exact judges and comparison contracts frozen by Goal, and
   the uniquely empty terminal-result collection. Raw delta identity and route relations are
   preflighted before any lossy dictionary or set projection.
@@ -111,16 +119,20 @@ derives start, fork, join, and end positions from the selected graph.
 
 Run treats that graph as scheduling authority. Only local `pass` and `fail`
 choose an operation edge. Findings and unknowns are event annotations. At most one
-emergency patch may precede an activated normal operation response, and its
-verification scope is fixed to mainline resumption. Abort requires one sourced
+emergency patch may precede an activated normal operation response when that
+operation froze a matching seam; its verification scope is fixed to mainline
+resumption. Abort requires one sourced
 external cancellation or recoverable runtime fact; Run then follows only the
 Plan's frozen response and cannot patch that response. A halt is exactly
 `plan-complete` or `abort`; an incomplete ledger is merely open. The projection
 retains every Plan operation as `pass`, `fail`, or `not-run` and reports only
 `open`, `plan-complete`, or `abort` topology while the journal
-remains the only process history. Patch tools, permissions, read/write
-positions, resources, and maximum effects remain inside the Goal envelope
-rather than widening it at runtime.
+remains the only execution history. Patch tools, permissions, read/write
+positions, resources, and maximum effects remain inside the exact Plan-owned
+seam rather than being improvised from the wider Goal envelope. Finish closure
+actions form a later ledger under Goal's separately frozen closure policy; one
+final halt records that closure work has ended rather than inferring terminality
+from the absence of another action.
 
 ## 6. Stable and temporary state
 
@@ -129,11 +141,11 @@ iteration and Finish settlement inputs contain changed, added, and retired
 Account semantics; retained items and all aggregate Account fields are
 mechanically derived. Goal sources and canonical empty collections, Plan graph
 projections, and Run's fixed or ledger-determined fields are also generated.
-Observe, Goal, Plan, Finish, and Run projections are immutable materialized documents. Derived
+Observe, Goal, Plan, Finish, and Run/Finish projections are immutable materialized documents. Derived
 fields are rejected at the public semantic boundary rather than accepted as
 caller-maintained compatibility copies. A Run
-projection is valid only relative to its exact source ledger. Run events are
-immutable append-only facts. Stable structured outputs are created only by the
+projection is valid only relative to its exact source ledger. Run and Finish
+closure events are immutable append-only facts. Stable structured outputs are created only by the
 Tool and are never hand-patched.
 
 Semantic content identity excludes generated time but includes exact bindings.
@@ -177,17 +189,24 @@ The isolated suite exercises one complete cycle, including:
 - rejection of a frozen Goal without acceptance and of an unavailable judge;
 - forward binary Plan routing with fork and join projections, separated normal
   and abort phases, and a Plan-owned abort response;
-- six-family Goal-envelope containment for Plan operations and emergency patches;
+- six-family Goal-envelope containment for Plan operations, plus exact
+  Plan-owned seam containment for emergency patches;
 - Run activation, one emergency patch, patch refusal on repetition, binary
   results, explicit abort confirmation, two-state halt, and projection;
-- Finish settlement in which a failed operation is recovered by the frozen
-  route and the Goal still passes;
+- named acceptance cases whose required set rejects any omitted predecessor
+  sample, including general and single-facet Goal forms, patch boundaries,
+  zero/one/multiple-action Finish histories, and all admitted evidence origins;
+- Finish closure-ledger append, explicit halt, and settlement in which a failed operation is
+  recovered by the frozen route and the Goal still passes;
 - Finish projection of the Goal judge/comparison contract and rejection of a
   caller-supplied replacement scale;
 - legal zero-control and zero-patch settlement;
 - full adjacent `0.4.1` to `0.5.0` and `0.5.0` to `0.6.0` chain migrations with
   explicit digest transitions;
 - refusal of a Plan back edge and an unactivated Run operation.
+
+The suite also compares every frozen `0.9.0` contract byte-for-byte with commit
+`c9f42c7`; aggregate check count alone is not release coverage.
 
 Passing proves only these mechanical contracts. It does not prove evidence
 truth, semantic sufficiency, route wisdom, authorization, adoption, or

@@ -16,10 +16,39 @@ from typing import Any
 
 ROOT = Path(__file__).resolve().parents[1]
 SKILL_NAMES = ("k4-observe", "k4-goal", "k4-plan", "k4-run", "k4-finish")
+REQUIRED_ACCEPTANCE_CASES = frozenset({
+    "goal.general.accept",
+    "goal.single-facet.accept",
+    "goal.invalid-hybrid.reject",
+    "patch.enabled.accept",
+    "patch.disabled.reject",
+    "patch.repeated.reject",
+    "patch.out-of-envelope.reject",
+    "patch.wrong-return.reject",
+    "closure.zero.halted.accept",
+    "closure.one.halted.accept",
+    "closure.multi.halted.accept",
+    "closure.open.projectable",
+    "closure.open.reject-settlement",
+    "closure.tampered.reject",
+    "closure.post-halt.reject",
+    "evidence.account.accept",
+    "evidence.run.accept",
+    "evidence.closure.accept",
+    "evidence.absent.reject",
+    "compatibility.existing-suite.pass",
+    "compatibility.0.9-contract-bytes.match",
+    "coverage.missing-required.reject",
+    "coverage.complete.accept",
+})
 
 
 def canonical_bytes(value: Any) -> bytes:
     return (json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + "\n").encode()
+
+
+def canonical_line(value: Any) -> bytes:
+    return (json.dumps(value, ensure_ascii=False, separators=(",", ":"), sort_keys=True) + "\n").encode()
 
 
 def write_json(path: Path, value: Any) -> None:
@@ -48,11 +77,16 @@ def manifest_input(root: Path) -> dict[str, Any]:
         "k4-goal": ["skills/k4-goal/scripts/materialize"],
         "k4-plan": ["skills/k4-plan/scripts/materialize"],
         "k4-run": ["skills/k4-run/scripts/append", "skills/k4-run/scripts/project", "skills/k4-run/scripts/validate"],
-        "k4-finish": ["skills/k4-finish/scripts/materialize"],
+        "k4-finish": [
+            "skills/k4-finish/scripts/append",
+            "skills/k4-finish/scripts/project",
+            "skills/k4-finish/scripts/validate",
+            "skills/k4-finish/scripts/materialize",
+        ],
     }
     return {
         "extension_id": "k4-work-cycle",
-        "extension_version": "0.9.0",
+        "extension_version": "0.10.0",
         "semantic_entry": "WORKFLOW.md",
         "cue_version": "v0.17.1",
         "shared_tool": "tools/stable-result",
@@ -125,6 +159,21 @@ class Harness:
         self.env = dict(os.environ)
         self.env["K4_STABLE_RESULT"] = str(self.tool)
         self.passed = 0
+        self.acceptance_cases: set[str] = set()
+
+    def cover(self, key: str) -> None:
+        if key not in REQUIRED_ACCEPTANCE_CASES:
+            raise AssertionError(f"undeclared acceptance case: {key}")
+        if key in self.acceptance_cases:
+            raise AssertionError(f"acceptance case recorded twice: {key}")
+        self.acceptance_cases.add(key)
+        print(f"COVER {key}")
+
+    @staticmethod
+    def require_coverage(required: frozenset[str], observed: set[str]) -> None:
+        missing = sorted(required - observed)
+        if missing:
+            raise AssertionError(f"missing required acceptance cases: {missing}")
 
     def command(self, skill: str, script: str) -> str:
         return str(self.root / "skills" / skill / "scripts" / script)
@@ -152,6 +201,7 @@ class Harness:
         output: Path,
         bindings: list[tuple[str, Path | None]],
         run_log: Path | None = None,
+        closure_log: Path | None = None,
     ) -> None:
         source = self.work / f"{label.replace(' ', '-')}-input.json"
         write_json(source, semantic)
@@ -163,7 +213,21 @@ class Harness:
                 words.extend(("--bind", f"{name}={value}"))
         if run_log is not None:
             words.extend(("--run-log", str(run_log)))
+        if closure_log is not None:
+            words.extend(("--closure-log", str(closure_log)))
         self.ok(label, *words)
+        if skill == "k4-finish":
+            validate = [
+                self.command("k4-finish", "validate"),
+                "--document", str(output),
+                "--run-log", str(run_log),
+                "--closure-log", str(closure_log),
+            ]
+            for name, value in bindings:
+                if value is not None:
+                    validate.extend(("--bind", f"{name}={value}"))
+            self.ok(f"validate {label}", *validate)
+            return
         validate = [
             str(self.tool),
             "--contract",
@@ -177,19 +241,6 @@ class Harness:
                 validate.extend(("--null-bind", name))
             else:
                 validate.extend(("--bind", f"{name}={value}"))
-        if run_log is not None:
-            validate.extend(
-                (
-                    "--project-log-bind",
-                    f"run={run_log}",
-                    "--projection-contract",
-                    str(self.root / "skills" / "k4-run" / "assets" / "protocol.cue"),
-                    "--projection-bind",
-                    "goal",
-                    "--projection-bind",
-                    "plan",
-                )
-            )
         self.ok(f"validate {label}", *validate)
 
     def append(self, label: str, event: dict[str, Any], log: Path, goal: Path, plan: Path) -> None:
@@ -206,6 +257,29 @@ class Harness:
             f"goal={goal}",
             "--bind",
             f"plan={plan}",
+        )
+
+    def append_finish(
+        self,
+        label: str,
+        event: dict[str, Any],
+        log: Path,
+        observe: Path,
+        goal: Path,
+        plan: Path,
+        run: Path,
+    ) -> None:
+        source = self.work / f"{label.replace(' ', '-')}.json"
+        write_json(source, event)
+        self.ok(
+            label,
+            self.command("k4-finish", "append"),
+            "--input", str(source),
+            "--log", str(log),
+            "--bind", f"previous_account={observe}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={run}",
         )
 
     def run(self) -> None:
@@ -355,13 +429,13 @@ class Harness:
                 "confidence": 0.8,
                 "basis_refs": ["asset://repo"],
             },
-            "change_surface": {
-                "primary_facet": "fixture delivery",
+            "change_contract": {
                 "direct_change": "create the expected result",
-                "open_boundaries": ["fixture output"],
-                "bounded_boundaries": ["fixture tests"],
-                "frozen_boundaries": ["external systems"],
+                "direct_positions": ["fixture delivery"],
                 "derivative_effects": ["local evidence"],
+                "affected_positions": ["fixture evidence"],
+                "frozen_positions": ["external systems"],
+                "specialization": None,
             },
             "boundary_feasibility": {
                 "checks": [
@@ -386,6 +460,16 @@ class Harness:
                 "resources": ["resource://local"],
                 "budget": "one bounded attempt",
                 "maximum_side_effects": ["fixture files", "one fixture adapter"],
+            },
+            "closure_policy": {
+                "maximum_actions": 2,
+                "allowed_kinds": ["verify"],
+                "available_tools": ["tool://fixture"],
+                "permission_refs": ["authorization://fixture"],
+                "read_refs": ["asset://repo"],
+                "write_refs": [],
+                "resources": ["resource://local"],
+                "maximum_side_effects": [],
             },
             "acceptance_points": [
                 {
@@ -455,11 +539,38 @@ class Harness:
             "--bind", f"observe={observe0}",
         )
         self.materialize("Goal", "k4-goal", goal_input, goal, [("observe", observe0)])
+        self.cover("goal.general.accept")
         goal_doc = read_json(goal)["document"]
         if goal_doc["status"] != "frozen":
             raise AssertionError("a declared unknown incorrectly blocked Goal")
         point_id = goal_doc["acceptance_points"][0]["point_id"]
         invariant_id, terminal_id = [item["control_id"] for item in goal_doc["control_contracts"]]
+
+        specialized_goal_input = json.loads(json.dumps(goal_input))
+        specialized_goal_input["change_contract"]["specialization"] = {
+            "kind": "single-facet",
+            "facet_ref": "fixture delivery",
+            "incident_boundaries": [
+                {"position_ref": f"fixture-boundary-{index}", "state": ("open" if index == 0 else "frozen"), "rationale": "explicit fixture topology"}
+                for index in range(6)
+            ],
+        }
+        specialized_goal = self.work / "single-facet-goal.json"
+        self.materialize("Single-facet Goal", "k4-goal", specialized_goal_input, specialized_goal, [("observe", observe0)])
+        self.cover("goal.single-facet.accept")
+
+        invalid_hybrid = json.loads(json.dumps(specialized_goal_input))
+        invalid_hybrid["change_contract"]["specialization"]["facet_ref"] = "fixture evidence"
+        invalid_hybrid_source = self.work / "invalid-hybrid-goal-input.json"
+        write_json(invalid_hybrid_source, invalid_hybrid)
+        self.refuse(
+            "Goal rejects invalid specialized hybrid",
+            self.command("k4-goal", "materialize"),
+            "--input", str(invalid_hybrid_source),
+            "--output", str(self.work / "never-invalid-hybrid-goal.json"),
+            "--bind", f"observe={observe0}",
+        )
+        self.cover("goal.invalid-hybrid.reject")
 
         def operation(key: str, deps: list[int], targets_pass: list[int], targets_fail: list[int], satisfies: list[str]) -> dict[str, Any]:
             return {
@@ -487,6 +598,7 @@ class Harness:
                 "idempotency": "fresh fixture output",
                 "retry_limit": 0,
                 "failure_handling": {"mode": "restore", "target_ref": f"artifact://{key}", "action_ref": "tool://fixture", "check_ref": "tool://fixture", "reason": "restore the fixture baseline"},
+                "emergency_patch": None,
                 "on_result": {
                     "pass": {"next_operation_indices": targets_pass, "reason": "pass route"},
                     "fail": {"next_operation_indices": targets_fail, "reason": "fail route"},
@@ -510,6 +622,15 @@ class Harness:
             ],
             "blockers": [],
             "unknowns": ["one branch may fail and use its frozen route"],
+        }
+        plan_input["operations"][2]["emergency_patch"] = {
+            "trigger": "a required fixture adapter is missing",
+            "tool_refs": ["tool://fixture"],
+            "permission_refs": ["authorization://fixture"],
+            "read_refs": ["asset://repo"],
+            "write_refs": ["artifact://adapter"],
+            "resource_refs": ["resource://local"],
+            "maximum_side_effects": ["one fixture adapter"],
         }
         self.materialize("Plan", "k4-plan", plan_input, plan, [("goal", goal)])
         plan_doc = read_json(plan)["document"]
@@ -616,12 +737,12 @@ class Harness:
             "verification_scope": "mainline-resumption-only",
         }
         patch_boundary_mutations = {
-            "tool": ("tool_refs", ["tool://outside-goal"]),
-            "permission": ("permission_refs", ["authorization://outside-goal"]),
-            "read": ("read_refs", ["asset://outside-goal"]),
-            "write": ("write_refs", ["artifact://outside-goal"]),
-            "resource": ("resource_refs", ["resource://outside-goal"]),
-            "effect": ("maximum_side_effects", ["outside-goal effect"]),
+            "tool": ("tool_refs", ["tool://outside-plan-seam"]),
+            "permission": ("permission_refs", ["authorization://outside-plan-seam"]),
+            "read": ("read_refs", ["asset://outside-plan-seam"]),
+            "write": ("write_refs", ["artifact://branch-a"]),
+            "resource": ("resource_refs", ["resource://outside-plan-seam"]),
+            "effect": ("maximum_side_effects", ["fixture files"]),
         }
         for label, (field, value) in patch_boundary_mutations.items():
             invalid_patch = json.loads(json.dumps(patch_event))
@@ -630,7 +751,7 @@ class Harness:
             write_json(invalid_patch_source, invalid_patch)
             before = log.read_bytes()
             self.refuse(
-                f"Run rejects patch outside Goal {label}",
+                f"Run rejects patch outside Plan seam {label}",
                 self.command("k4-run", "append"),
                 "--input", str(invalid_patch_source),
                 "--log", str(log),
@@ -639,7 +760,44 @@ class Harness:
             )
             if log.read_bytes() != before:
                 raise AssertionError("refused boundary patch changed the Run ledger")
+        self.cover("patch.out-of-envelope.reject")
+        no_seam_patch = json.loads(json.dumps(patch_event))
+        no_seam_patch["operation_id"] = operations[1]
+        no_seam_source = self.work / "patch-without-plan-seam.json"
+        write_json(no_seam_source, no_seam_patch)
+        self.refuse(
+            "Run rejects patch without Plan seam",
+            self.command("k4-run", "append"),
+            "--input", str(no_seam_source),
+            "--log", str(log),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+        )
+        self.cover("patch.disabled.reject")
         self.append("Run emergency patch", patch_event, log, goal, plan)
+        self.cover("patch.enabled.accept")
+
+        wrong_return_log = self.work / "wrong-return-run.jsonl"
+        wrong_return_events = [json.loads(line) for line in log.read_text().splitlines()]
+        wrong_return_envelope = wrong_return_events[-1]
+        wrong_return_envelope["event"]["authorized_policy"]["return_operation_id"] = operations[1]
+        wrong_return_envelope["content_sha256"] = hashlib.sha256(canonical_bytes({
+            "bindings": wrong_return_envelope["bindings"],
+            "event": wrong_return_envelope["event"],
+        })).hexdigest()
+        wrong_return_envelope["event_sha256"] = hashlib.sha256(canonical_line({
+            key: value for key, value in wrong_return_envelope.items() if key != "event_sha256"
+        })).hexdigest()
+        wrong_return_log.write_bytes(b"".join(canonical_line(event) for event in wrong_return_events))
+        self.refuse(
+            "Run rejects a patch with a different return operation",
+            self.command("k4-run", "validate"),
+            "--log", str(wrong_return_log),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+        )
+        self.cover("patch.wrong-return.reject")
+
         duplicate_input = self.work / "duplicate-patch.json"
         write_json(duplicate_input, patch_event)
         before = log.read_bytes()
@@ -657,6 +815,7 @@ class Harness:
         )
         if log.read_bytes() != before:
             raise AssertionError("refused patch changed the Run ledger")
+        self.cover("patch.repeated.reject")
         self.append("Run branch A", result_event(1, "pass"), log, goal, plan)
         self.append("Run branch B", result_event(2, "fail", finding=True, unknown=True), log, goal, plan)
         self.append("Run join", result_event(3, "pass"), log, goal, plan)
@@ -692,6 +851,50 @@ class Harness:
         if projected["topology_status"] != "plan-complete" or [item["local_result"] for item in projected["operations"]] != ["pass", "pass", "fail", "pass"]:
             raise AssertionError("Run projection did not preserve binary operation results")
 
+        closure_log = self.work / "finish-closure.jsonl"
+        closure_action = self.work / "finish-closure-action.json"
+        write_json(closure_action, {
+            "action_key": "verify-fixture-result",
+            "kind": "verify",
+            "authorized_by": ["authorization://fixture"],
+            "tool_ref": "tool://fixture",
+            "permission_refs": ["authorization://fixture"],
+            "read_refs": ["asset://repo"],
+            "write_refs": [],
+            "resource_refs": ["resource://local"],
+            "maximum_side_effects": [],
+            "result": "pass",
+            "actual_refs": ["actual://finish-verification"],
+            "evidence_refs": ["evidence://finish-verification"],
+            "actual_effect_refs": [],
+            "findings": [],
+            "unknowns": [],
+        })
+        self.ok(
+            "Finish closure append",
+            self.command("k4-finish", "append"),
+            "--input", str(closure_action),
+            "--log", str(closure_log),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        open_closure_projection = self.work / "finish-open-closure-projection.json"
+        self.ok(
+            "Finish open closure projection",
+            self.command("k4-finish", "project"),
+            "--log", str(closure_log),
+            "--output", str(open_closure_projection),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        if read_json(open_closure_projection)["document"]["status"] != "open":
+            raise AssertionError("non-terminal Finish closure did not remain open")
+        self.cover("closure.open.projectable")
+
         finish = self.work / "finish.json"
         finish_input = {
             "cutoff": "after Run halt",
@@ -705,7 +908,7 @@ class Harness:
                         "epistemic_kind": "fact",
                         "state": "aligned",
                         "statement": "the expected result exists and validates",
-                        "evidence_refs": ["run://ledger"],
+                        "evidence_refs": ["evidence://finish-verification"],
                         "route": "none",
                     },
                 },
@@ -714,8 +917,8 @@ class Harness:
                 {
                     "id": point_id,
                     "result": "pass",
-                    "actual_refs": ["actual://result"],
-                    "evidence_refs": ["accept://result"],
+                    "actual_refs": ["actual://finish-verification"],
+                    "evidence_refs": ["evidence://finish-verification"],
                     "unknowns": [],
                 }
             ],
@@ -723,16 +926,72 @@ class Harness:
                 {
                     "id": terminal_id,
                     "result": "pass",
-                    "actual_refs": ["actual://budget"],
-                    "evidence_refs": ["terminal://control"],
+                    "actual_refs": ["evidence://budget"],
+                    "evidence_refs": ["evidence://budget"],
                     "unknowns": [],
                 }
             ],
-            "closure_actions": [],
             "attributions": [],
             "residual_effects": [],
-            "result_disposition": {"state": "placed", "statement": "result remains in fixture", "refs": ["actual://result"]},
+            "result_disposition": {"state": "placed", "statement": "result remains in fixture", "refs": ["actual://finish-verification"]},
+            "incomplete_deliverable": None,
         }
+        open_finish_source = self.work / "finish-open-closure-input.json"
+        write_json(open_finish_source, finish_input)
+        self.refuse(
+            "Finish rejects settlement from an open closure ledger",
+            self.command("k4-finish", "materialize"),
+            "--input", str(open_finish_source),
+            "--output", str(self.work / "never-open-finish.json"),
+            "--run-log", str(log),
+            "--closure-log", str(closure_log),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        self.cover("closure.open.reject-settlement")
+
+        self.append_finish(
+            "Finish closure halt",
+            {"kind": "halt", "reason": "closure work is complete", "evidence_refs": ["evidence://finish-verification"]},
+            closure_log,
+            observe0,
+            goal,
+            plan,
+            projection,
+        )
+        self.cover("closure.one.halted.accept")
+
+        post_halt_source = self.work / "finish-post-halt-action.json"
+        write_json(post_halt_source, read_json(closure_action))
+        self.refuse(
+            "Finish rejects events after closure halt",
+            self.command("k4-finish", "append"),
+            "--input", str(post_halt_source),
+            "--log", str(closure_log),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        self.cover("closure.post-halt.reject")
+
+        tampered_closure_log = self.work / "finish-tampered-closure.jsonl"
+        tampered_closure_log.write_bytes(closure_log.read_bytes().replace(
+            b"evidence://finish-verification", b"evidence://finish-verificatioN", 1
+        ))
+        self.refuse(
+            "Finish rejects a tampered closure ledger",
+            self.command("k4-finish", "validate"),
+            "--log", str(tampered_closure_log),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        self.cover("closure.tampered.reject")
+
         bad_finish_input = json.loads(json.dumps(finish_input))
         bad_finish_input["acceptance_results"][0]["comparison_refs"] = ["caller://scale"]
         bad_finish_source = self.work / "finish-caller-comparison-input.json"
@@ -743,18 +1002,22 @@ class Harness:
             "--input", str(bad_finish_source),
             "--output", str(self.work / "never-finish-caller-comparison.json"),
             "--run-log", str(log),
+            "--closure-log", str(closure_log),
             "--bind", f"previous_account={observe0}",
             "--bind", f"goal={goal}",
             "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
         )
         self.materialize(
             "Finish",
             "k4-finish",
             finish_input,
             finish,
-            [("previous_account", observe0), ("goal", goal), ("plan", plan)],
+            [("previous_account", observe0), ("goal", goal), ("plan", plan), ("run", projection)],
             run_log=log,
+            closure_log=closure_log,
         )
+        self.cover("evidence.closure.accept")
         closure = read_json(finish)["document"]["closure"]
         if closure["attempt_result"] != "pass" or closure["operation_summary"] != {
             "planned": 4,
@@ -769,6 +1032,81 @@ class Harness:
             raise AssertionError("Finish did not derive the truthful settlement")
         self.passed += 1
         print("PASS Finish recovered-failure settlement")
+
+        account_evidence_input = json.loads(json.dumps(finish_input))
+        account_evidence_input["updates"][0]["item"]["evidence_refs"] = ["asset://repo"]
+        account_evidence_input["acceptance_results"][0]["actual_refs"] = ["asset://repo"]
+        account_evidence_input["acceptance_results"][0]["evidence_refs"] = ["asset://repo"]
+        account_evidence_input["result_disposition"]["refs"] = ["asset://repo"]
+        account_evidence_finish = self.work / "account-evidence-finish.json"
+        self.materialize(
+            "Finish using opening Account evidence",
+            "k4-finish",
+            account_evidence_input,
+            account_evidence_finish,
+            [("previous_account", observe0), ("goal", goal), ("plan", plan), ("run", projection)],
+            run_log=log,
+            closure_log=closure_log,
+        )
+        self.cover("evidence.account.accept")
+
+        absent_evidence_input = json.loads(json.dumps(finish_input))
+        absent_evidence_input["updates"][0]["item"]["evidence_refs"] = ["evidence://absent"]
+        absent_evidence_source = self.work / "finish-absent-evidence-input.json"
+        write_json(absent_evidence_source, absent_evidence_input)
+        self.refuse(
+            "Finish rejects evidence absent from all three admitted origins",
+            self.command("k4-finish", "materialize"),
+            "--input", str(absent_evidence_source),
+            "--output", str(self.work / "never-absent-evidence-finish.json"),
+            "--run-log", str(log),
+            "--closure-log", str(closure_log),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        self.cover("evidence.absent.reject")
+
+        multi_closure_log = self.work / "multi-finish-closure.jsonl"
+        for index in (1, 2):
+            multi_action = read_json(closure_action)
+            multi_action["action_key"] = f"verify-fixture-result-{index}"
+            multi_action["actual_refs"] = [f"actual://finish-verification-{index}"]
+            multi_action["evidence_refs"] = [f"evidence://finish-verification-{index}"]
+            self.append_finish(
+                f"Finish multi-action {index}",
+                multi_action,
+                multi_closure_log,
+                observe0,
+                goal,
+                plan,
+                projection,
+            )
+        self.append_finish(
+            "Finish multi-action halt",
+            {"kind": "halt", "reason": "both closure actions are complete", "evidence_refs": ["evidence://finish-verification-2"]},
+            multi_closure_log,
+            observe0,
+            goal,
+            plan,
+            projection,
+        )
+        multi_closure_projection = self.work / "multi-finish-closure-projection.json"
+        self.ok(
+            "Finish multi-action projection",
+            self.command("k4-finish", "project"),
+            "--log", str(multi_closure_log),
+            "--output", str(multi_closure_projection),
+            "--bind", f"previous_account={observe0}",
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={plan}",
+            "--bind", f"run={projection}",
+        )
+        multi_projection_document = read_json(multi_closure_projection)["document"]
+        if multi_projection_document["status"] != "halted" or len(multi_projection_document["actions"]) != 2:
+            raise AssertionError("multi-action Finish closure did not preserve both actions and halt")
+        self.cover("closure.multi.halted.accept")
 
         # Empty optional control and patch collections are a normal boundary case.
         zero_goal_input = json.loads(json.dumps(goal_input))
@@ -828,18 +1166,44 @@ class Harness:
             zero_goal,
             zero_plan,
         )
+        zero_projection = self.work / "zero-run-projection.json"
+        self.ok(
+            "Run zero-patch projection",
+            self.command("k4-run", "project"),
+            "--log", str(zero_log),
+            "--output", str(zero_projection),
+            "--bind", f"goal={zero_goal}",
+            "--bind", f"plan={zero_plan}",
+        )
         zero_finish_input = json.loads(json.dumps(finish_input))
+        zero_finish_input["updates"][0]["item"]["evidence_refs"] = ["evidence://zero-control-operation"]
         zero_finish_input["acceptance_results"][0]["id"] = zero_point_id
+        zero_finish_input["acceptance_results"][0]["actual_refs"] = ["actual://zero-control-result"]
+        zero_finish_input["acceptance_results"][0]["evidence_refs"] = ["evidence://zero-control-operation"]
         zero_finish_input["terminal_control_results"] = []
+        zero_finish_input["result_disposition"]["refs"] = ["actual://zero-control-result"]
         zero_finish = self.work / "zero-control-finish.json"
+        zero_closure_log = self.work / "zero-finish-closure.jsonl"
+        self.append_finish(
+            "Finish zero-action halt",
+            {"kind": "halt", "reason": "no closure action is required", "evidence_refs": ["evidence://zero-control-operation"]},
+            zero_closure_log,
+            observe0,
+            zero_goal,
+            zero_plan,
+            zero_projection,
+        )
+        self.cover("closure.zero.halted.accept")
         self.materialize(
             "Finish with zero controls and patches",
             "k4-finish",
             zero_finish_input,
             zero_finish,
-            [("previous_account", observe0), ("goal", zero_goal), ("plan", zero_plan)],
+            [("previous_account", observe0), ("goal", zero_goal), ("plan", zero_plan), ("run", zero_projection)],
             run_log=zero_log,
+            closure_log=zero_closure_log,
         )
+        self.cover("evidence.run.accept")
         zero_summary = read_json(zero_finish)["document"]["closure"]["operation_summary"]
         if zero_summary["emergency_patches"] != 0 or zero_summary["planned"] != 1:
             raise AssertionError("zero-element Finish projection is not truthful")
@@ -993,6 +1357,15 @@ class Harness:
             goal,
             abort_plan,
         )
+        abort_projection = self.work / "abort-run-projection.json"
+        self.ok(
+            "Run abort projection",
+            self.command("k4-run", "project"),
+            "--log", str(abort_log),
+            "--output", str(abort_projection),
+            "--bind", f"goal={goal}",
+            "--bind", f"plan={abort_plan}",
+        )
         abort_finish_input = json.loads(json.dumps(finish_input))
         abort_finish_input["cutoff"] = "after sourced abort"
         abort_finish_input["delta"] = {
@@ -1002,37 +1375,48 @@ class Harness:
         abort_finish_input["updates"][0]["item"].update({
             "state": "gap",
             "statement": "the expected result remains incomplete after abort",
-            "evidence_refs": ["run://abort-ledger"],
+            "evidence_refs": ["evidence://abort-operation"],
             "route": "none",
             "route_ref": None,
         })
         abort_finish_input["acceptance_results"][0].update({
             "result": "fail",
-            "actual_refs": ["actual://absent-result"],
-            "evidence_refs": ["accept://abort"],
+            "actual_refs": ["actual://abort-state"],
+            "evidence_refs": ["evidence://abort-operation"],
         })
         abort_finish_input["terminal_control_results"][0].update({
             "result": "pass",
-            "actual_refs": ["actual://abort-budget"],
-            "evidence_refs": ["terminal://abort"],
+            "actual_refs": ["abort://budget"],
+            "evidence_refs": ["abort://budget"],
         })
         abort_finish_input["result_disposition"] = {
             "state": "pending",
             "statement": "the incomplete result remains unadopted",
-            "refs": ["actual://absent-result"],
+            "refs": ["actual://abort-state"],
         }
         abort_finish_input["incomplete_deliverable"] = {
             "statement": "the expected result was not completed",
-            "refs": ["resume://after-cancellation"],
+            "refs": ["actual://abort-state"],
         }
         abort_finish = self.work / "abort-finish.json"
+        abort_closure_log = self.work / "abort-finish-closure.jsonl"
+        self.append_finish(
+            "Finish abort closure halt",
+            {"kind": "halt", "reason": "the aborted attempt is ready for settlement", "evidence_refs": ["abort://halt"]},
+            abort_closure_log,
+            observe0,
+            goal,
+            abort_plan,
+            abort_projection,
+        )
         self.materialize(
             "Finish abort settlement",
             "k4-finish",
             abort_finish_input,
             abort_finish,
-            [("previous_account", observe0), ("goal", goal), ("plan", abort_plan)],
+            [("previous_account", observe0), ("goal", goal), ("plan", abort_plan), ("run", abort_projection)],
             run_log=abort_log,
+            closure_log=abort_closure_log,
         )
         abort_closure = read_json(abort_finish)["document"]["closure"]
         if (
@@ -1184,6 +1568,36 @@ class Harness:
                 raise AssertionError(f"0.6.0 migration falsely preserved {name} file digest")
         self.passed += 1
         print("PASS 0.6.0 migration records exact schema and digest transitions")
+
+        for skill in SKILL_NAMES:
+            baseline = subprocess.run(
+                ["git", "-C", str(ROOT), "show", f"c9f42c7:skills/{skill}/assets/protocol.cue"],
+                capture_output=True,
+                check=False,
+            )
+            if baseline.returncode != 0:
+                raise AssertionError(f"cannot read 0.9.0 {skill} contract bytes\n{baseline.stderr.decode(errors='replace')}")
+            frozen = self.root / "tools" / "contracts" / "0.9.0" / f"{skill}.cue"
+            if baseline.stdout != frozen.read_bytes():
+                raise AssertionError(f"frozen 0.9.0 contract differs from c9f42c7 for {skill}")
+        self.cover("compatibility.0.9-contract-bytes.match")
+
+        self.cover("compatibility.existing-suite.pass")
+        behavior_cases = REQUIRED_ACCEPTANCE_CASES - {
+            "coverage.missing-required.reject",
+            "coverage.complete.accept",
+        }
+        try:
+            self.require_coverage(behavior_cases, self.acceptance_cases - {"goal.general.accept"})
+        except AssertionError as error:
+            if "goal.general.accept" not in str(error):
+                raise
+        else:
+            raise AssertionError("coverage gate accepted a deliberately incomplete case set")
+        self.cover("coverage.missing-required.reject")
+        self.require_coverage(behavior_cases, self.acceptance_cases)
+        self.cover("coverage.complete.accept")
+        self.require_coverage(REQUIRED_ACCEPTANCE_CASES, self.acceptance_cases)
         print(f"PASS {self.passed} checks")
 
 

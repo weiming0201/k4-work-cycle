@@ -1,0 +1,102 @@
+#!/usr/bin/env python3
+"""Append one Goal-authorized Finish closure action or the terminal halt."""
+
+from __future__ import annotations
+
+import json
+import os
+from pathlib import Path
+import shutil
+import subprocess
+import sys
+import tempfile
+
+
+HELP = """Usage: append --input FILE --log FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE --bind run=FILE
+
+Append one immutable Finish closure event after Run has halted.
+
+Semantic input:
+  halt: {kind: halt, reason, evidence_refs}
+  action:
+  action_key: stable name unique inside this closure ledger
+  kind: verify | cleanup | release | rollback | compensate | package
+  authorized_by: nonempty authority reference array
+  tool_ref: exact tool used
+  permission_refs, read_refs, write_refs, resource_refs: optional arrays
+  maximum_side_effects: optional array bounded by Goal closure_policy
+  result: pass | fail
+  actual_refs, actual_effect_refs, findings, unknowns: optional arrays
+  evidence_refs: nonempty actual evidence array
+
+An action is accepted only inside the exact closure_policy frozen by Goal.
+Halt is a separate terminal event, does not consume maximum_actions, and rejects
+every later append. A zero-action closure still requires one explicit halt.
+Exit status: 0 after one append; 1 without append on refusal.
+"""
+
+
+def tool_path(skill_dir: Path) -> str | None:
+    configured = os.environ.get("K4_STABLE_RESULT")
+    if configured:
+        return configured
+    found = shutil.which("stable-result")
+    if found:
+        return found
+    for candidate in (skill_dir.parent.parent / "tools" / "stable-result", skill_dir.parent.parent / "workspace" / "tools" / "stable-result"):
+        if candidate.is_file() and os.access(candidate, os.X_OK):
+            return str(candidate)
+    return None
+
+
+def input_position(arguments: list[str]) -> tuple[int, str, bool]:
+    for index, word in enumerate(arguments):
+        if word == "--input" and index + 1 < len(arguments):
+            return index + 1, arguments[index + 1], False
+        if word.startswith("--input="):
+            return index, word.split("=", 1)[1], True
+    raise ValueError("input: --input FILE is required")
+
+
+def main() -> int:
+    if sys.argv[1:] == ["--help"]:
+        print(HELP, end="")
+        return 0
+    skill_dir = Path(__file__).resolve().parents[1]
+    tool = tool_path(skill_dir)
+    if tool is None:
+        print("stable-result is not available", file=sys.stderr)
+        return 1
+    arguments = sys.argv[1:]
+    try:
+        position, source, inline = input_position(arguments)
+        value = json.loads(Path(source).read_text())
+        if not isinstance(value, dict):
+            raise ValueError("input: expected one JSON object")
+        if value.get("kind") != "halt":
+            for field in ("permission_refs", "read_refs", "write_refs", "resource_refs", "maximum_side_effects", "actual_refs", "actual_effect_refs", "findings", "unknowns"):
+                value.setdefault(field, [])
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
+        return 1
+
+    temporary_name = ""
+    try:
+        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as temporary:
+            json.dump(value, temporary, ensure_ascii=False, indent=2, sort_keys=True)
+            temporary.write("\n")
+            temporary_name = temporary.name
+        forwarded = list(arguments)
+        forwarded[position] = f"--input={temporary_name}" if inline else temporary_name
+        return subprocess.run(
+            [tool, "--contract", str(skill_dir / "assets" / "protocol.cue"),
+             "append", "--expression", "next_closure_event", *forwarded],
+            check=False,
+        ).returncode
+    finally:
+        if temporary_name:
+            Path(temporary_name).unlink(missing_ok=True)
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

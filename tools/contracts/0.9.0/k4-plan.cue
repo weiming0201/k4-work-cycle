@@ -25,7 +25,7 @@ context: _
 	content_sha256: #Digest
 })
 #GoalEnvelope: close({
-	schema:            "k4-goal-document/v8"
+	schema:            "k4-goal-document/v7"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: {...}
@@ -97,26 +97,6 @@ context: _
 	check_ref:  null | #Text
 	reason:     #Text
 })
-#EmergencyPatchPolicyInput: close({
-	trigger:              #Text
-	tool_refs:            #NonEmptyStrings
-	permission_refs:      #Strings
-	read_refs:            #Strings
-	write_refs:           #NonEmptyStrings
-	resource_refs:        #Strings
-	maximum_side_effects: #NonEmptyStrings
-})
-#EmergencyPatchPolicy: close({
-	trigger:              #Text
-	tool_refs:            #NonEmptyStrings
-	permission_refs:      #Strings
-	read_refs:            #Strings
-	write_refs:           #NonEmptyStrings
-	resource_refs:        #Strings
-	maximum_side_effects: #NonEmptyStrings
-	maximum_attempts:     1
-	return_operation_id:  #OperationID
-})
 #OperationInput: close({
 	phase:              #OperationPhase
 	operation_key:      #Text
@@ -135,7 +115,6 @@ context: _
 	idempotency:      #Text
 	retry_limit:      uint
 	failure_handling: #FailureHandling
-	emergency_patch:  null | #EmergencyPatchPolicyInput
 	on_result:        #OutcomeRoutesInput
 })
 #Operation: close({
@@ -157,7 +136,6 @@ context: _
 	idempotency:      #Text
 	retry_limit:      uint
 	failure_handling: #FailureHandling
-	emergency_patch:  null | #EmergencyPatchPolicy
 	on_result:        #OutcomeRoutes
 })
 #AbortResponseInput: close({
@@ -210,7 +188,7 @@ context: _
 	status:   "executable" | "not-executable"
 })
 #Envelope: close({
-	schema:            "k4-plan-document/v9"
+	schema:            "k4-plan-document/v8"
 	generated_unix_ms: uint
 	content_sha256:    #Digest
 	bindings: close({goal: #Binding})
@@ -250,7 +228,6 @@ _operationIDs: [for operation in _input.operations {
 		idempotency:          operation.idempotency
 		retry_limit:          operation.retry_limit
 		failure_handling:     operation.failure_handling
-		emergency_patch:      operation.emergency_patch
 	})
 	"op-\(strings.SliceRunes(hex.Encode(sha256.Sum256(json.Marshal(_core))), 0, 16))"
 }]
@@ -288,15 +265,6 @@ for index, operation in _input.operations {
 	for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
 	for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
 	for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-	if operation.emergency_patch != null {
-		_patch: operation.emergency_patch
-		for ref in _patch.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("operations.emergency_patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
-		for ref in _patch.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.emergency_patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
-		for ref in _patch.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.emergency_patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
-		for ref in _patch.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.emergency_patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
-		for ref in _patch.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.emergency_patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
-		for effect in _patch.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.emergency_patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-	}
 	for dependency in operation.depends_on_indices {
 		if dependency >= index {_invalid: error("contract relation rejected: dependency >= index")}
 	}
@@ -316,21 +284,6 @@ for index, operation in _input.operations {
 }
 
 _operations: [for index, operation in _input.operations {
-	_patch: null | #EmergencyPatchPolicy
-	if operation.emergency_patch == null {_patch: null}
-	if operation.emergency_patch != null {
-		_patch: close({
-			trigger:              operation.emergency_patch.trigger
-			tool_refs:            operation.emergency_patch.tool_refs
-			permission_refs:      operation.emergency_patch.permission_refs
-			read_refs:            operation.emergency_patch.read_refs
-			write_refs:           operation.emergency_patch.write_refs
-			resource_refs:        operation.emergency_patch.resource_refs
-			maximum_side_effects: operation.emergency_patch.maximum_side_effects
-			maximum_attempts:     1
-			return_operation_id:  _operationIDs[index]
-		})
-	}
 	close({
 		operation_id:  _operationIDs[index]
 		phase:         operation.phase
@@ -350,7 +303,6 @@ _operations: [for index, operation in _input.operations {
 		idempotency:          operation.idempotency
 		retry_limit:          operation.retry_limit
 		failure_handling:     operation.failure_handling
-		emergency_patch:      _patch
 		on_result: close({
 			pass: close({
 				next_operation_ids: [for target in operation.on_result.pass.next_operation_indices {_operationIDs[target]}]
@@ -447,15 +399,6 @@ _generateChecks: {
 		for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
 		for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
 		for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-		if operation.emergency_patch != null {
-			_patch: operation.emergency_patch
-			for ref in _patch.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("operations.emergency_patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
-			for ref in _patch.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.emergency_patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
-			for ref in _patch.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.emergency_patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
-			for ref in _patch.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.emergency_patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
-			for ref in _patch.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.emergency_patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
-			for effect in _patch.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.emergency_patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-		}
 		if len(operation.write_refs)+len(operation.maximum_side_effects) == 0 && operation.failure_handling.mode != "none" {_invalid: error("operations.failure_handling.mode: an operation without side effects must use none")}
 		if len(operation.write_refs)+len(operation.maximum_side_effects) > 0 && operation.failure_handling.mode == "none" {_invalid: error("operations.failure_handling.mode: an operation with possible side effects requires restore, compensate, or preserve-stop")}
 		if operation.failure_handling.mode == "none" {
@@ -544,7 +487,7 @@ _document: #Document & {
 	status:   _status
 }
 generate: _generateChecks & close({
-	schema: "k4-plan-document/v9"
+	schema: "k4-plan-document/v8"
 	bindings: close({goal: _goal.binding})
 	document: _document
 })
@@ -595,18 +538,6 @@ _expectedExistingOperationIDs: [for operation in _existing.document.operations {
 		idempotency:          operation.idempotency
 		retry_limit:          operation.retry_limit
 		failure_handling:     operation.failure_handling
-		if operation.emergency_patch == null {emergency_patch: null}
-		if operation.emergency_patch != null {
-			emergency_patch: close({
-				trigger:              operation.emergency_patch.trigger
-				tool_refs:            operation.emergency_patch.tool_refs
-				permission_refs:      operation.emergency_patch.permission_refs
-				read_refs:            operation.emergency_patch.read_refs
-				write_refs:           operation.emergency_patch.write_refs
-				resource_refs:        operation.emergency_patch.resource_refs
-				maximum_side_effects: operation.emergency_patch.maximum_side_effects
-			})
-		}
 	})))), 0, 16))"
 }]
 for index, operation in _existing.document.operations {
@@ -617,15 +548,6 @@ for index, operation in _existing.document.operations {
 	for ref in operation.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.write_refs: every write position must be allowed by the Goal execution envelope")}}
 	for ref in operation.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.resource_refs: every resource must be allowed by the Goal execution envelope")}}
 	for effect in operation.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-	if operation.emergency_patch != null {
-		if operation.emergency_patch.return_operation_id != operation.operation_id {_invalid: error("operations.emergency_patch.return_operation_id: must return to its owning operation")}
-		for ref in operation.emergency_patch.tool_refs {if !list.Contains(_availableTools, ref) {_invalid: error("operations.emergency_patch.tool_refs: every tool must be allowed by the Goal execution envelope")}}
-		for ref in operation.emergency_patch.permission_refs {if !list.Contains(_availablePermissions, ref) {_invalid: error("operations.emergency_patch.permission_refs: every permission must be allowed by the Goal execution envelope")}}
-		for ref in operation.emergency_patch.read_refs {if !list.Contains(_availableReads, ref) {_invalid: error("operations.emergency_patch.read_refs: every read position must be allowed by the Goal execution envelope")}}
-		for ref in operation.emergency_patch.write_refs {if !list.Contains(_availableWrites, ref) {_invalid: error("operations.emergency_patch.write_refs: every write position must be allowed by the Goal execution envelope")}}
-		for ref in operation.emergency_patch.resource_refs {if !list.Contains(_availableResources, ref) {_invalid: error("operations.emergency_patch.resource_refs: every resource must be allowed by the Goal execution envelope")}}
-		for effect in operation.emergency_patch.maximum_side_effects {if !list.Contains(_availableEffects, effect) {_invalid: error("operations.emergency_patch.maximum_side_effects: every effect must be allowed by the Goal execution envelope")}}
-	}
 	if len(operation.write_refs)+len(operation.maximum_side_effects) == 0 && operation.failure_handling.mode != "none" {_invalid: error("operations.failure_handling.mode: an operation without side effects must use none")}
 	if len(operation.write_refs)+len(operation.maximum_side_effects) > 0 && operation.failure_handling.mode == "none" {_invalid: error("operations.failure_handling.mode: an operation with possible side effects requires restore, compensate, or preserve-stop")}
 	if operation.failure_handling.mode == "none" && (operation.failure_handling.target_ref != null || operation.failure_handling.action_ref != null || operation.failure_handling.check_ref != null) {_invalid: error("operations.failure_handling: none requires null refs")}

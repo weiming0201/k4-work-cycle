@@ -24,8 +24,12 @@ if [ "${1:-}" = "--help" ]; then
         '  decision_basis: {expected_benefit, expected_cost, downside, reversibility,' \
         '    information_value, confidence, basis_refs}' \
         '  decision_basis.confidence: number from 0 through 1' \
-        '  change_surface: {primary_facet, direct_change, open_boundaries,' \
-        '    bounded_boundaries, frozen_boundaries, derivative_effects}' \
+        '  change_contract: {direct_change, direct_positions, derivative_effects,' \
+        '    affected_positions, frozen_positions, specialization}' \
+        '  specialization is null unless this Goal deliberately uses the K4 single-facet' \
+        '    topology; then use {kind: single-facet, facet_ref, incident_boundaries}' \
+        '    with exactly six unique {position_ref, state, rationale} entries' \
+        '    where state is open | bounded | frozen and at least one is not frozen' \
         '  boundary_feasibility: {checks, conclusion, unknowns}' \
         '  boundary_feasibility.checks must cover exactly once: subject-boundary,' \
         '    account-sufficiency, change-surface, execution-envelope,' \
@@ -42,6 +46,10 @@ if [ "${1:-}" = "--help" ]; then
         '  execution_envelope.available_tools, permission_refs, read_refs,' \
         '    write_refs, resources, maximum_side_effects:' \
         '    nonempty unique string arrays; its other fields are nonempty strings' \
+        '  closure_policy: {maximum_actions, allowed_kinds, available_tools,' \
+        '    permission_refs, read_refs, write_refs, resources, maximum_side_effects}' \
+        '    all collections are subsets of execution_envelope; maximum_actions=0' \
+        '    requires allowed_kinds=[]' \
         '  acceptance_points[]: {statement, required_evidence, judge, acceptance}' \
         '  acceptance: {observable, conditions, window, expected, falsifier,' \
         '    comparison_method, sampling_rule}' \

@@ -1,12 +1,13 @@
 # K4 Work Cycle
 
-K4 Work Cycle turns one evidenced situation into one bounded attempt, records
-what actually happens, and settles the result back into the situation account.
+K4 Work Cycle separates fact maintenance from one bounded change transaction.
+Observe stabilizes and iterates the evidenced situation; Goal through Finish
+select, execute, and settle one attempt against one exact observed Account.
 
 ```text
-Observe -> Goal -> Plan -> Run -> Finish
-   ^                                  |
-   `------ a later task may bind -----'
+Observe* -> Account
+              |
+              `-> Goal -> Plan -> Run -> Finish -> successor Account
 ```
 
 The five names are responsibilities, not actors and not five copies of one
@@ -18,8 +19,12 @@ generic form. They use four storage strategies:
 - Plan freezes one finite operation DAG;
 - Run appends one linear event ledger.
 
-A later Observe may consume a Finish Account. That begins another task; it does
-not make the current Run self-revising.
+Observe is not the first mandatory stage of every change transaction. It may
+iterate an Account zero or more times and stop without selecting any Goal.
+The transaction begins only when Goal binds one exact Observe Account. Finish
+settles its successor Account; it neither starts another Observe nor selects
+another Goal. A later Observe may consume that successor Account as a separate
+fact-maintenance act.
 
 ## 1. Observe: open the general ledger
 
@@ -55,13 +60,16 @@ observed subject, or close an attempt.
 Goal binds one exact Observe Account and selects only explicit Goal candidates
 from it. It distinguishes the selected candidate from supporting Account items,
 states the expected benefit, cost, downside, reversibility, information value,
-confidence and evidence basis, and freezes the primary change surface and its
-open, bounded, frozen and derivative boundaries. Before freezing, it records a
+confidence and evidence basis, and freezes a task-native direct change,
+directly changed positions, derivative effects, affected positions, and frozen
+positions. A single-facet boundary model is an optional specialization, not a
+universal Goal shape. Before freezing, it records a
 seven-part boundary-feasibility review covering subject, Account sufficiency,
 change surface, execution envelope, downside, terminal observability and failure
 stop. It also freezes the baseline, target, evidence cutoff, scope, acceptance
 points, bounded judges, available tools, authority, resources, budget, maximum
-effects, and execution controls for one attempt. The execution envelope names
+effects, and execution controls for one attempt. A separate closure policy
+freezes the exact subset Finish may use after Run. The execution envelope names
 the exact available tools, permissions, readable and writable positions,
 resources, and maximum effects; later stages may narrow but not enlarge it.
 The Tool derives the Goal's source inventory from selected Observe evidence,
@@ -96,6 +104,7 @@ Each stable real operation contains:
 - permissions, resources, and maximum side effects;
 - structured preconditions, a complete local pass/fail judgment contract,
   idempotency, retry ceiling, and structured failure handling;
+- an optional operation-local, one-shot emergency-patch seam;
 - exactly two result edges, `pass` and `fail`.
 
 The caller selects operation content and the two result edges. The Tool derives
@@ -136,12 +145,13 @@ Run may search, inspect, and choose implementation details needed by the active
 operation within the frozen authority. A Finding or unknown may accompany
 either binary result and has no routing authority.
 
-If a significant Plan omission prevents the active operation, Run may make at
-most one emergency patch attempt for that operation. The patch records its
+If a significant Plan omission prevents the active operation and that operation
+froze a matching emergency-patch seam, Run may make its one patch attempt. No
+Plan seam means no patch authority; the Goal envelope is not a fallback. The patch records its
 reason, script, tools, exact positions, maximum and actual effects, trace,
 application result, at least one actual Finding, and any unknowns. The Tool does
 not fabricate a Finding from the patch reason. Its tools, permissions, positions,
-resources, and maximum effects remain inside the Goal envelope. It is checked
+resources, and maximum effects remain inside that Plan-owned seam. It is checked
 only far enough to resume the original operation; it receives no separate
 systematic test. Emergency patching applies only to normal operations. The
 original operation is then retried and still produces `pass` or `fail`.
@@ -167,13 +177,17 @@ the final Goal, adopt output, publish, or choose the next Goal.
 
 ## 5. Finish: settle the ledger
 
-Finish binds the exact opening Account, Goal, Plan, and halted Run ledger. The
-Tool derives its current projection from those exact bytes. Finish may follow recorded evidence
+Finish binds the exact opening Account, Goal, Plan, halted Run projection, and
+Run ledger. Every actual closure action is first appended to a second ledger
+bound to those predecessors. One explicit final `halt` event terminates that
+ledger after zero or more actions. An open ledger remains projectable for
+recovery but cannot settle; no action may follow the halt. Settlement cannot
+invent closure work or terminality after the fact. Finish may follow recorded evidence
 references when settlement needs detail, but it does not repair the attempt or
 invent missing events.
 
 Finish accepts only the closing semantic delta, actual terminal judgments,
-authorized closure actions, attribution, residual effects, result disposition,
+attribution, residual effects, result disposition,
 and failure-only incomplete content. It performs
 two inseparable projections of one settlement:
 
@@ -195,7 +209,10 @@ Goal has no terminal controls; otherwise actual judgments remain required.
 Every Goal acceptance point and terminal control receives a binary judgment
 under the exact judge and comparison contract frozen by Goal. Account item and
 retirement evidence form the Account source closure; judgment, Run and closure
-evidence form a separate closure source closure. Unknowns remain attached
+evidence form a separate closure source closure. Every settled evidence
+reference must already belong to the opening Account, actual Run evidence, or
+actual Finish closure evidence; new external evidence waits for the next
+Observe. Unknowns remain attached
 annotations. An attempt passes only when Run reaches
 `plan-complete` and all acceptance, terminal-control, and invariant-control
 judgments pass. `abort` always settles the attempt as failed and retains the
@@ -206,8 +223,8 @@ fail route; operation failure alone does not decide the Goal.
 Finish does not modify Goal or Plan, append Run events, repair product semantics,
 adopt, publish, or select a future Goal. Its permitted closure work is limited
 to authorized verification, cleanup, release, rollback, compensation and
-packaging. The next Observe decides how the settled Account
-changes the opportunity inventory.
+packaging. A later Observe may decide how the settled Account changes the
+opportunity inventory, but Finish does not launch it.
 
 ## 6. Stable boundaries
 

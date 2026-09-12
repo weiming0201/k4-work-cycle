@@ -29,11 +29,12 @@ operation's projected Plan contract and selects the frozen successor edge.
 Findings and unknowns are annotations and may accompany either result.
 Operations that were never activated remain `not-run` in the projection.
 
-One emergency patch may restore an activated normal operation when the Plan omitted a
-necessary execution detail. Its only verification scope is resumption of the
-original operation; it has no separate systematic test and does not change the
-Goal or Plan. Its tools, permissions, read/write positions, resources, and
-maximum effects must all remain inside the Goal execution envelope.
+One emergency patch may restore an activated normal operation only when that
+operation contains a matching frozen patch seam. Its only verification scope is
+resumption of the original operation; it has no separate systematic test and
+does not change Goal or Plan. The event projects the exact authorizing seam,
+and all actual tools, permissions, positions, resources, and effects remain
+inside it. The Goal envelope alone grants no patch.
 
 An abort response is frozen by Plan as `preserve-only` or a separate finite
 abort-phase route. It is never a third result edge, cannot claim Goal

@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 from pathlib import Path
 import shutil
@@ -13,7 +14,7 @@ import tempfile
 from typing import Any
 
 
-HELP = """Usage: materialize --input FILE --output FILE --run-log FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE
+HELP = """Usage: materialize --input FILE --output FILE --run-log FILE --closure-log FILE --bind previous_account=FILE --bind goal=FILE --bind plan=FILE --bind run=FILE
 
 Settle one halted Run ledger into the shared Account and report.
 
@@ -21,9 +22,11 @@ Options:
   --input FILE    JSON object with the semantic fields below
   --output FILE   absent output path whose parent already exists
   --run-log FILE  exact append-only Run ledger; its projection is derived mechanically
+  --closure-log FILE  exact append-only Finish closure ledger ending in one explicit halt
   --bind previous_account=FILE  exact pre-Goal Observe Account
   --bind goal=FILE              exact frozen Goal
   --bind plan=FILE              exact executable Plan
+  --bind run=FILE               exact halted Run projection derived from --run-log
 
 Semantic input:
   cutoff and delta: {summary}
@@ -39,18 +42,19 @@ Semantic input:
   each judgment result: pass | fail; unknowns are annotations, not result states
   result_disposition: {state, statement, refs}
   incomplete_deliverable: required only for fail
-  closure_actions[]: {action_key, kind, authorized_by, result, actual_refs,
-    evidence_refs, actual_effect_refs, findings, unknowns}; omission means empty
   attributions[]: {stage, statement, evidence_refs, claim_limit}; omission means empty
   residual_effects[]: {statement, state, refs, responsible_ref}; omission means empty
 
-The Tool carries unmentioned predecessors forward, derives Account continuity,
-separate Account and closure sources, lenses, ids, delta evidence, and exact
-Goal judge/comparison contracts, and supplies canonical null or empty fields.
+Closure events are not part of this one-shot input. Record each authorized
+action and then one terminal halt with scripts/append; this Tool validates and
+projects that exact ledger. An open or absent ledger cannot settle. It carries
+unmentioned predecessors forward and derives Account
+continuity, source closures, lenses, ids, delta evidence, Goal contracts, and
+canonical null or empty fields.
 
 Output:
-  The stable Finish envelope binds the exact Run ledger and stores the next
-  Account plus the derived settlement report.
+  The stable Finish envelope binds the exact Run projection, identifies both
+  source ledgers, and stores the next Account plus the settlement report.
 
 Exit status: 0 on materialization; 1 without output on refusal.
 """
@@ -125,8 +129,9 @@ def preflight(value: Any, previous: dict, goal: dict) -> list[str]:
     if "terminal_control_results" not in value and terminal_controls:
         add_error(errors, "input.terminal_control_results: required because the bound Goal has terminal controls")
 
-    if "items" in value or "source_refs" in value:
-        add_error(errors, "input: use semantic delta fields; full formatted Account input is not accepted by v5")
+    forbidden_derived = sorted(set(value) & {"items", "source_refs", "closure_actions", "closure_ledger", "run_log_ref", "run_log_sha256"})
+    if forbidden_derived:
+        add_error(errors, f"input: derived fields are Tool-owned: {', '.join(forbidden_derived)}")
         return errors
 
     collections: dict[str, list[Any]] = {}
@@ -241,7 +246,6 @@ def normalize(value: object, previous: dict, goal: dict) -> dict:
     for result in value.get("terminal_control_results", []):
         result.setdefault("unknowns", [])
     value.setdefault("incomplete_deliverable", None)
-    value.setdefault("closure_actions", [])
     value.setdefault("attributions", [])
     value.setdefault("residual_effects", [])
     return value
@@ -254,7 +258,6 @@ def main() -> int:
 
     script_dir = Path(__file__).resolve().parent
     skill_dir = script_dir.parent
-    run_contract = skill_dir.parent / "k4-run" / "assets" / "protocol.cue"
     tool = os.environ.get("K4_STABLE_RESULT") or shutil.which("stable-result")
     if tool is None:
         for candidate in (
@@ -270,30 +273,38 @@ def main() -> int:
 
     arguments = sys.argv[1:]
     forwarded: list[str] = []
-    run_log: str | None = None
-    index = 1
-    while index < len(sys.argv):
-        word = sys.argv[index]
-        if word == "--run-log":
-            if run_log is not None or index + 1 >= len(sys.argv):
-                print("--run-log requires exactly one FILE", file=sys.stderr)
+    special: dict[str, str] = {}
+    index = 0
+    while index < len(arguments):
+        word = arguments[index]
+        if word in {"--run-log", "--closure-log"}:
+            if word in special or index + 1 >= len(arguments):
+                print(f"{word} requires exactly one FILE", file=sys.stderr)
                 return 1
-            run_log = sys.argv[index + 1]
+            special[word] = arguments[index + 1]
             index += 2
             continue
-        if word == "--bind" and index + 1 < len(sys.argv) and sys.argv[index + 1].startswith("run="):
-            print("bind the Run ledger with --run-log, not --bind run=PROJECTION", file=sys.stderr)
-            return 1
+        if word.startswith("--run-log=") or word.startswith("--closure-log="):
+            name, path = word.split("=", 1)
+            if name in special or not path:
+                print(f"{name} requires exactly one FILE", file=sys.stderr)
+                return 1
+            special[name] = path
+            index += 1
+            continue
         forwarded.append(word)
         index += 1
 
-    if run_log is None:
-        print("--run-log FILE is required", file=sys.stderr)
+    if "--run-log" not in special or "--closure-log" not in special:
+        print("--run-log FILE and --closure-log FILE are required", file=sys.stderr)
         return 1
 
     try:
         source_name = argument(arguments, "--input")
         bound = bindings(arguments)
+        for required in ("previous_account", "goal", "plan", "run"):
+            if required not in bound:
+                raise ValueError(f"--bind {required}=FILE is required")
         previous = json.loads(Path(bound["previous_account"]).read_text())["document"]["account"]
         goal = json.loads(Path(bound["goal"]).read_text())["document"]
         raw = json.loads(Path(source_name).read_text())
@@ -306,36 +317,72 @@ def main() -> int:
         print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
         return 1
 
-    temporary_name = ""
+    run_log = Path(special["--run-log"])
+    closure_log = Path(special["--closure-log"])
+    if not run_log.is_file():
+        print(f"run log does not exist: {run_log}", file=sys.stderr)
+        return 1
+    if not closure_log.is_file():
+        print(f"closure log does not exist: {closure_log}", file=sys.stderr)
+        return 1
+
     try:
-        with tempfile.NamedTemporaryFile("w", encoding="utf-8", suffix=".json", delete=False) as temporary:
-            json.dump(normalized, temporary, ensure_ascii=False, indent=2, sort_keys=True)
-            temporary.write("\n")
-            temporary_name = temporary.name
-        normalized_forwarded: list[str] = []
-        index = 0
-        while index < len(forwarded):
-            if forwarded[index] == "--input" and index + 1 < len(forwarded):
-                normalized_forwarded.extend(("--input", temporary_name))
-                index += 2
-                continue
-            if forwarded[index].startswith("--input="):
-                normalized_forwarded.append(f"--input={temporary_name}")
-            else:
-                normalized_forwarded.append(forwarded[index])
-            index += 1
-        command = [
-            str(tool), "--contract", str(skill_dir / "assets" / "protocol.cue"), "materialize",
-            *normalized_forwarded,
-            "--project-log-bind", f"run={run_log}",
-            "--projection-contract", str(run_contract),
-            "--projection-bind", "goal",
-            "--projection-bind", "plan",
-        ]
-        return subprocess.run(command, check=False).returncode
-    finally:
-        if temporary_name:
-            Path(temporary_name).unlink(missing_ok=True)
+        run_validation = subprocess.run(
+            [str(skill_dir.parent / "k4-run" / "scripts" / "validate"),
+             "--document", bound["run"], "--source-log", str(run_log),
+             "--bind", f"goal={bound['goal']}", "--bind", f"plan={bound['plan']}"],
+            check=False,
+        )
+        if run_validation.returncode != 0:
+            return run_validation.returncode
+
+        with tempfile.TemporaryDirectory(prefix="k4-finish-") as directory:
+            temporary_dir = Path(directory)
+            closure_projection = temporary_dir / "closure-projection.json"
+            projection = subprocess.run(
+                [str(tool), "--contract", str(skill_dir / "assets" / "protocol.cue"),
+                 "project", "--expression", "project_closure", "--log", str(closure_log),
+                 "--output", str(closure_projection),
+                 "--bind", f"previous_account={bound['previous_account']}",
+                 "--bind", f"goal={bound['goal']}",
+                 "--bind", f"plan={bound['plan']}",
+                 "--bind", f"run={bound['run']}"],
+                check=False,
+            )
+            if projection.returncode != 0:
+                return projection.returncode
+            projection_value = json.loads(closure_projection.read_text())
+            run_bytes = run_log.read_bytes()
+            closure_bytes = closure_log.read_bytes()
+            normalized["run_log_ref"] = f"k4-run-event/v8@jsonl#sha256={hashlib.sha256(run_bytes).hexdigest()}"
+            normalized["run_log_sha256"] = hashlib.sha256(run_bytes).hexdigest()
+            normalized["closure_ledger"] = {
+                "ref": f"k4-finish-closure-event/v1@jsonl#sha256={hashlib.sha256(closure_bytes).hexdigest()}",
+                "sha256": hashlib.sha256(closure_bytes).hexdigest(),
+                "projection": projection_value["document"],
+            }
+            normalized_input = temporary_dir / "normalized.json"
+            normalized_input.write_text(json.dumps(normalized, ensure_ascii=False, indent=2, sort_keys=True) + "\n")
+            normalized_forwarded: list[str] = []
+            index = 0
+            while index < len(forwarded):
+                if forwarded[index] == "--input" and index + 1 < len(forwarded):
+                    normalized_forwarded.extend(("--input", str(normalized_input)))
+                    index += 2
+                    continue
+                if forwarded[index].startswith("--input="):
+                    normalized_forwarded.append(f"--input={normalized_input}")
+                else:
+                    normalized_forwarded.append(forwarded[index])
+                index += 1
+            return subprocess.run(
+                [str(tool), "--contract", str(skill_dir / "assets" / "protocol.cue"),
+                 "materialize", *normalized_forwarded],
+                check=False,
+            ).returncode
+    except (OSError, json.JSONDecodeError, ValueError) as error:
+        print(json.dumps({"errors": [str(error)]}, ensure_ascii=False), file=sys.stderr)
+        return 1
 
 
 if __name__ == "__main__":
