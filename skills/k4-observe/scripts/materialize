@@ -33,13 +33,13 @@ Options:
 Bootstrap input:
   subject, boundary, cutoff: nonempty strings
   delta: {summary}
-  completeness: {estimate, claim_limit, remaining_angles}
+  completeness: {estimate (number from 0 through 1), claim_limit, remaining_angles}
   additions[]: {reason, item}
 
 Iteration input:
   cutoff: nonempty string
   delta: {summary}
-  completeness: {estimate, claim_limit, remaining_angles}
+  completeness: {estimate (number from 0 through 1), claim_limit, remaining_angles}
   updates[]: {previous_item_id, reason, item}                 (optional)
   additions[]: {reason, item}                                (optional)
   retirements[]: {previous_item_id, reason, evidence_refs}   (optional)
