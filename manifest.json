@@ -1,6 +1,6 @@
 {
   "bindings": {},
-  "content_sha256": "f098e78a73b5081eb3e3698566a4e1be448668eaa1184972c2c98de8087a7035",
+  "content_sha256": "b482cab25c901c3dbf558739ad7d3d7a633d99c050886390c17ee3710da2ad90",
   "document": {
     "cue_version": "v0.17.1",
     "extension_id": "k4-work-cycle",
@@ -96,7 +96,7 @@
       },
       {
         "path": "skills/k4-observe/scripts/materialize",
-        "sha256": "2a1a84574aab1632943e7e323d6419c34a2a41b2e964dba2a86ee5fbeaf17c75"
+        "sha256": "52b39a465186d73b787cd2578479bbf311332a1559f99e71341d5d7c6032d1ed"
       },
       {
         "path": "skills/k4-plan/SKILL.md",
@@ -313,6 +313,6 @@
       }
     ]
   },
-  "generated_unix_ms": 1789245665241,
+  "generated_unix_ms": 1789547932939,
   "schema": "k4-work-cycle-manifest/v2"
 }
